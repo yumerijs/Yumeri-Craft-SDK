@@ -1,6 +1,6 @@
 {
   "name": "@yumerijs/craft-sdk",
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.4",
   "description": "Yumeri Craft SDK",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
