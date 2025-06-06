@@ -7,7 +7,6 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "prepare": "npm run clean && npm run build",
     "test": "ts-node src/test.ts",
     "example": "ts-node examples/download-client.ts",
     "pack": "npm pack"
