@@ -1,0 +1,39 @@
+{
+  "name": "@yumerijs/craft-sdk",
+  "version": "1.0.0-alpha.1",
+  "description": "Yumeri Craft SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepare": "npm run clean && npm run build",
+    "test": "ts-node src/test.ts",
+    "example": "ts-node examples/download-client.ts",
+    "pack": "npm pack"
+  },
+  "keywords": [
+    "minecraft",
+    "downloader",
+    "typescript",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.15.29",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "fs-extra": "^11.3.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ]
+}
+
