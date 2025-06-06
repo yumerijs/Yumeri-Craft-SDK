@@ -18,7 +18,7 @@
     "typescript",
     "game"
   ],
-  "author": "",
+  "author": "FireGuo<fireguo@flweb.cn>",
   "license": "MIT",
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",
@@ -36,4 +36,3 @@
     "LICENSE"
   ]
 }
-
