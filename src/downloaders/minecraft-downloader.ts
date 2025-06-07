@@ -49,6 +49,7 @@ export class MinecraftDownloader {
    */
   public async downloadClient(
     versionId: string,
+    versionName: string,
     onProgress?: ProgressCallback
   ): Promise<DownloadResult> {
     try {
@@ -56,7 +57,7 @@ export class MinecraftDownloader {
       const versionInfo = await this.versionManager.getVersionInfo(versionId);
       
       // 下载客户端JAR
-      const clientResult = await this.downloadClientJar(versionInfo, (progress, total, percentage) => {
+      const clientResult = await this.downloadClientJar(versionInfo, versionName, (progress, total, percentage) => {
         if (onProgress) {
           // 客户端JAR下载占总进度的20%
           onProgress(progress, total, percentage * 0.2);
@@ -68,7 +69,7 @@ export class MinecraftDownloader {
       }
       
       // 下载库文件
-      const librariesResult = await this.librariesDownloader.downloadLibraries(versionInfo, (progress, total, percentage) => {
+      const librariesResult = await this.librariesDownloader.downloadLibraries(versionInfo, versionName, (progress, total, percentage) => {
         if (onProgress) {
           // 库文件下载占总进度的30%
           onProgress(progress, total, 20 + percentage * 0.3);
@@ -104,12 +105,13 @@ export class MinecraftDownloader {
    */
   private async downloadClientJar(
     versionInfo: VersionInfo,
+    versionName: string,
     onProgress?: ProgressCallback
   ): Promise<DownloadResult> {
     try {
       const clientInfo = versionInfo.downloads.client;
       const clientUrl = SourceConfig.convertUrl(clientInfo.url, this.source);
-      const clientPath = path.join(this.dataDir, 'versions', versionInfo.id, `${versionInfo.id}.jar`);
+      const clientPath = path.join(this.dataDir, 'versions', versionName, `${versionName}.jar`);
       
       // 确保目录存在
       await fs.ensureDir(path.dirname(clientPath));
@@ -150,6 +152,7 @@ export class MinecraftDownloader {
    */
   public async downloadServer(
     versionId: string,
+    versionName: string,
     onProgress?: ProgressCallback
   ): Promise<DownloadResult> {
     try {
@@ -166,7 +169,7 @@ export class MinecraftDownloader {
       
       const serverInfo = versionInfo.downloads.server;
       const serverUrl = SourceConfig.convertUrl(serverInfo.url, this.source);
-      const serverPath = path.join(this.dataDir, 'versions', versionId, `${versionId}-server.jar`);
+      const serverPath = path.join(this.dataDir, 'versions', versionName, `${versionName}-server.jar`);
       
       // 确保目录存在
       await fs.ensureDir(path.dirname(serverPath));
