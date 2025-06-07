@@ -348,3 +348,128 @@ export interface DownloadResult {
   filePath?: string;
 }
 
+/**
+ * Forge版本信息
+ */
+export interface ForgeVersion {
+  /**
+   * Forge版本ID
+   */
+  id: string;
+  
+  /**
+   * Minecraft版本
+   */
+  mcVersion: string;
+  
+  /**
+   * Forge版本
+   */
+  version: string;
+  
+  /**
+   * 构建号
+   */
+  build: number;
+  
+  /**
+   * 下载URL
+   */
+  downloadUrl: string;
+  
+  /**
+   * 是否为推荐版本
+   */
+  recommended?: boolean;
+  
+  /**
+   * 是否为最新版本
+   */
+  latest?: boolean;
+}
+
+/**
+ * Forge安装结果
+ */
+export interface ForgeInstallResult {
+  /**
+   * 是否成功
+   */
+  success: boolean;
+  
+  /**
+   * 错误信息
+   */
+  error?: string;
+  
+  /**
+   * 安装的版本ID
+   */
+  versionId?: string;
+  
+  /**
+   * 版本JSON路径
+   */
+  versionJsonPath?: string;
+  
+  /**
+   * 版本JAR路径
+   */
+  versionJarPath?: string;
+}
+
+/**
+ * Fabric版本信息
+ */
+export interface FabricVersion {
+  /**
+   * Fabric版本ID
+   */
+  id: string;
+  
+  /**
+   * Minecraft版本
+   */
+  mcVersion: string;
+  
+  /**
+   * Loader版本
+   */
+  loaderVersion: string;
+  
+  /**
+   * 下载URL
+   */
+  downloadUrl: string;
+  
+  /**
+   * 是否为稳定版本
+   */
+  stable?: boolean;
+}
+
+/**
+ * Fabric安装结果
+ */
+export interface FabricInstallResult {
+  /**
+   * 是否成功
+   */
+  success: boolean;
+  
+  /**
+   * 错误信息
+   */
+  error?: string;
+  
+  /**
+   * 安装的版本ID
+   */
+  versionId?: string;
+  
+  /**
+   * 版本JSON路径
+   */
+  versionJsonPath?: string;
+}
+

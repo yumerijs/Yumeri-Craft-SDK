@@ -12,6 +12,8 @@ import { SourceConfig } from '../utils/source-config';
 import { VersionManager } from './version-manager';
 import { AssetsDownloader } from './assets-downloader';
 import { LibrariesDownloader } from './libraries-downloader';
+import { ForgeInstaller, ForgeVersion, ForgeInstallResult } from './forge-installer';
+import { FabricInstaller, FabricVersion, FabricInstallResult } from './fabric-installer';
 
 /**
  * Minecraft下载器
@@ -24,6 +26,8 @@ export class MinecraftDownloader {
   private versionManager: VersionManager;
   private assetsDownloader: AssetsDownloader;
   private librariesDownloader: LibrariesDownloader;
+  private forgeInstaller: ForgeInstaller;
+  private fabricInstaller: FabricInstaller;
 
   /**
    * 构造函数
@@ -39,6 +43,10 @@ export class MinecraftDownloader {
     this.versionManager = new VersionManager(this.source, this.dataDir);
     this.assetsDownloader = new AssetsDownloader(this.source, this.dataDir, this.maxConcurrentDownloads);
     this.librariesDownloader = new LibrariesDownloader(this.source, this.dataDir, this.maxConcurrentDownloads);
+    
+    // 初始化模组加载器安装器
+    this.forgeInstaller = new ForgeInstaller(this.source, this.dataDir, this.maxConcurrentDownloads);
+    this.fabricInstaller = new FabricInstaller(this.dataDir, this.maxConcurrentDownloads);
   }
 
   /**
@@ -203,6 +211,53 @@ export class MinecraftDownloader {
   }
 
   /**
+   * 获取Forge版本列表
+   * @param mcVersion Minecraft版本
+   * @returns Forge版本列表
+   */
+  public async getForgeVersions(mcVersion: string): Promise<ForgeVersion[]> {
+    return this.forgeInstaller.getForgeVersions(mcVersion);
+  }
+
+  /**
+   * 安装Forge
+   * @param forgeVersion Forge版本
+   * @param javaPath Java路径
+   * @param onProgress 进度回调
+   * @returns 安装结果
+   */
+  public async installForge(
+    forgeVersion: ForgeVersion,
+    javaPath: string = 'java',
+    onProgress?: ProgressCallback
+  ): Promise<ForgeInstallResult> {
+    return this.forgeInstaller.installForge(forgeVersion, javaPath, onProgress);
+  }
+
+  /**
+   * 获取Fabric版本列表
+   * @param mcVersion Minecraft版本
+   * @returns Fabric版本列表
+   */
+  public async getFabricVersions(mcVersion: string): Promise<FabricVersion[]> {
+    return this.fabricInstaller.getFabricVersions(mcVersion);
+  }
+
+  /**
+   * 安装Fabric
+   * @param fabricVersion Fabric版本
+   * @param onProgress 进度回调
+   * @returns 安装结果
+   */
+  public async installFabric(
+    fabricVersion: FabricVersion,
+    mcpath: string,
+    onProgress?: ProgressCallback
+  ): Promise<FabricInstallResult> {
+    return this.fabricInstaller.installFabric(fabricVersion, mcpath, onProgress);
+  }
+
+  /**
    * 获取版本管理器
    * @returns 版本管理器
    */
@@ -227,6 +282,22 @@ export class MinecraftDownloader {
   }
 
   /**
+   * 获取Forge安装器
+   * @returns Forge安装器
+   */
+  public getForgeInstaller(): ForgeInstaller {
+    return this.forgeInstaller;
+  }
+
+  /**
+   * 获取Fabric安装器
+   * @returns Fabric安装器
+   */
+  public getFabricInstaller(): FabricInstaller {
+    return this.fabricInstaller;
+  }
+
+  /**
    * 设置下载源
    * @param source 下载源
    */
@@ -235,6 +306,7 @@ export class MinecraftDownloader {
     this.versionManager.setSource(source);
     this.assetsDownloader.setSource(source);
     this.librariesDownloader.setSource(source);
+    this.forgeInstaller.setSource(source);
   }
 
   /**
@@ -254,6 +326,8 @@ export class MinecraftDownloader {
     this.versionManager.setDataDir(dataDir);
     this.assetsDownloader.setDataDir(dataDir);
     this.librariesDownloader.setDataDir(dataDir);
+    this.forgeInstaller.setDataDir(dataDir);
+    this.fabricInstaller.setDataDir(dataDir);
   }
 
   /**
@@ -272,6 +346,8 @@ export class MinecraftDownloader {
     this.maxConcurrentDownloads = maxConcurrentDownloads;
     this.assetsDownloader.setMaxConcurrentDownloads(maxConcurrentDownloads);
     this.librariesDownloader.setMaxConcurrentDownloads(maxConcurrentDownloads);
+    this.forgeInstaller.setMaxConcurrentDownloads(maxConcurrentDownloads);
+    this.fabricInstaller.setMaxConcurrentDownloads(maxConcurrentDownloads);
   }
 
   /**

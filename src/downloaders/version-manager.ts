@@ -122,7 +122,7 @@ export class VersionManager {
     }
 
     // 检查本地缓存
-    const versionDir = path.join(this.dataDir, 'versions', versionId);
+    const versionDir = path.join(this.dataDir, 'verioninfo/versions', versionId);
     const versionFile = path.join(versionDir, `${versionId}.json`);
     
     if (!forceRefresh && await fs.pathExists(versionFile)) {

@@ -183,6 +183,7 @@ export class FileDownloader {
    * 并行下载多个文件
    * @param downloads 下载任务列表
    * @param maxConcurrent 最大并发数
+   * @param verifySha1 是否验证SHA1
    * @returns 下载结果
    */
   public static async downloadFiles(
@@ -192,7 +193,8 @@ export class FileDownloader {
       sha1?: string;
       onProgress?: ProgressCallback;
     }>,
-    maxConcurrent: number = 3
+    maxConcurrent: number = 3,
+    verifySha1: boolean = true
   ): Promise<{
     success: number;
     failed: number;
@@ -214,7 +216,7 @@ export class FileDownloader {
         activeDownloads.add(download.url);
         
         // 执行下载
-        this.downloadFile(download.url, download.filePath, download.sha1, download.onProgress)
+        this.downloadFile(download.url, download.filePath, verifySha1 ? download.sha1 : undefined, download.onProgress)
           .then((success) => {
             results.push({
               url: download.url,

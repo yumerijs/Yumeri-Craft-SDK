@@ -130,7 +130,7 @@ export class AssetsDownloader {
       const end = Math.min(start + batchSize, downloads.length);
       const batch = downloads.slice(start, end);
       
-      const results = await FileDownloader.downloadFiles(batch, this.maxConcurrentDownloads);
+      const results = await FileDownloader.downloadFiles(batch, this.maxConcurrentDownloads, false);
       
       completed += batch.length;
       success += results.success;
