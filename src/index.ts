@@ -12,8 +12,11 @@ export { LibrariesDownloader } from './downloaders/libraries-downloader';
 export { MinecraftDownloader } from './downloaders/minecraft-downloader';
 
 // 导出模组加载器安装器
-export { ForgeInstaller, ForgeVersion, ForgeInstallResult } from './downloaders/forge-installer';
-export { FabricInstaller, FabricVersion, FabricInstallResult } from './downloaders/fabric-installer';
+export { ForgeInstaller } from './downloaders/forge-installer';
+export { FabricInstaller } from './downloaders/fabric-installer';
+
+// 导出启动器
+export { GameLauncher } from './launchers/game-launcher';
 
 // 默认导出
 import { MinecraftDownloader } from './downloaders/minecraft-downloader';

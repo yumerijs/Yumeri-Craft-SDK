@@ -3,6 +3,7 @@ import path from 'path';
 import axios from 'axios';
 import { DownloadSource, ProgressCallback } from '../types';
 import { FileDownloader } from '../utils/downloader';
+import { SourceConfig } from '../utils/source-config';
 
 /**
  * Fabric版本信息
@@ -163,14 +164,15 @@ export class FabricInstaller {
   }
   
   /**
-   * 安装Fabric
+   * 安装Fabric到指定版本文件夹
    * @param fabricVersion Fabric版本
+   * @param targetVersionName 目标版本名称（现有版本文件夹名）
    * @param onProgress 进度回调
    * @returns 安装结果
    */
   public async installFabric(
     fabricVersion: FabricVersion,
-    mcVersion: string,
+    targetVersionName: string,
     onProgress?: ProgressCallback
   ): Promise<FabricInstallResult> {
     try {
@@ -180,38 +182,55 @@ export class FabricInstaller {
       }
       
       const profilePath = await this.downloadFabricProfile(fabricVersion);
-      const profileJson = await fs.readJson(profilePath);
+      const fabricProfileJson = await fs.readJson(profilePath);
       
       if (onProgress) {
         onProgress(20, 100, 20);
       }
       
-      // 构建Fabric版本ID和目录
-      const fabricVersionId = `${fabricVersion.mcVersion}-fabric-${fabricVersion.loaderVersion}`;
-      const fabricVersionDir = path.join(this.dataDir, 'versions', mcVersion);
+      // 使用现有版本文件夹
+      const targetVersionDir = path.join(this.dataDir, 'versions', targetVersionName);
       
-      // 确保目录存在
-      await fs.ensureDir(fabricVersionDir);
+      // 确保目标版本目录存在
+      if (!await fs.pathExists(targetVersionDir)) {
+        throw new Error(`目标版本文件夹不存在: ${targetVersionDir}`);
+      }
       
-      // 创建版本JSON文件
-      const versionJsonPath = path.join(fabricVersionDir, `${fabricVersionId}.json`);
-      await fs.writeJson(versionJsonPath, profileJson, { spaces: 2 });
+      // 检查原版本JSON是否存在
+      const originalJsonPath = path.join(targetVersionDir, `${targetVersionName}.json`);
+      if (!await fs.pathExists(originalJsonPath)) {
+        throw new Error(`原版本JSON文件不存在: ${originalJsonPath}`);
+      }
+      
+      // 读取原版本JSON
+      const originalVersionJson = await fs.readJson(originalJsonPath);
+      
+      // 合并Fabric配置到原版本JSON
+      const mergedJson = this.mergeFabricConfig(originalVersionJson, fabricProfileJson);
+      
+      // 保存合并后的JSON到目标版本文件夹
+      const targetJsonPath = path.join(targetVersionDir, `${targetVersionName}.json`);
+      await fs.writeJson(targetJsonPath, mergedJson, { spaces: 2 });
       
       if (onProgress) {
         onProgress(30, 100, 30);
       }
       
       // 下载所有必要的库文件
-      const libraries = profileJson.libraries || [];
-      const totalLibraries = libraries.length;
+      const libraries = mergedJson.libraries || [];
+      const fabricLibraries = libraries.filter((lib: any) => 
+        lib.name && (lib.name.includes('fabric') || lib.name.includes('net.fabricmc'))
+      );
+      
+      const totalLibraries = fabricLibraries.length;
       let downloadedLibraries = 0;
       
       // 创建libraries目录
       const librariesDir = path.join(this.dataDir, 'libraries');
       await fs.ensureDir(librariesDir);
       
-      // 下载每个库文件
-      for (const library of libraries) {
+      // 下载每个Fabric库文件
+      for (const library of fabricLibraries) {
         try {
           if (library.downloads && library.downloads.artifact) {
             const artifact = library.downloads.artifact;
@@ -246,8 +265,8 @@ export class FabricInstaller {
       
       return {
         success: true,
-        versionId: fabricVersionId,
-        versionJsonPath
+        versionId: targetVersionName,
+        versionJsonPath: targetJsonPath
       };
     } catch (error) {
       console.error('安装Fabric失败', error);
@@ -256,6 +275,60 @@ export class FabricInstaller {
         error: error instanceof Error ? error.message : '安装Fabric失败'
       };
     }
+  }
+  
+  /**
+   * 合并Fabric配置到原版本JSON
+   * @param originalJson 原版本JSON
+   * @param fabricJson Fabric版本JSON
+   * @returns 合并后的JSON
+   */
+  private mergeFabricConfig(originalJson: any, fabricJson: any): any {
+    const merged = { ...originalJson };
+    
+    // 合并库文件列表
+    if (fabricJson.libraries) {
+      merged.libraries = [...(merged.libraries || []), ...fabricJson.libraries];
+    }
+    
+    // 更新主类
+    if (fabricJson.mainClass) {
+      merged.mainClass = fabricJson.mainClass;
+    }
+    
+    // 合并启动参数
+    if (fabricJson.arguments) {
+      merged.arguments = merged.arguments || {};
+      
+      // 合并JVM参数
+      if (fabricJson.arguments.jvm) {
+        merged.arguments.jvm = [...(merged.arguments.jvm || []), ...fabricJson.arguments.jvm];
+      }
+      
+      // 合并游戏参数
+      if (fabricJson.arguments.game) {
+        merged.arguments.game = [...(merged.arguments.game || []), ...fabricJson.arguments.game];
+      }
+    }
+    
+    // 处理旧版本的minecraftArguments
+    if (fabricJson.minecraftArguments && !merged.arguments) {
+      merged.minecraftArguments = fabricJson.minecraftArguments;
+    }
+    
+    // 合并其他Fabric特定配置
+    if (fabricJson.inheritsFrom) {
+      merged.inheritsFrom = fabricJson.inheritsFrom;
+    }
+    
+    if (fabricJson.jar) {
+      merged.jar = fabricJson.jar;
+    }
+    
+    // 保留Fabric版本信息
+    merged.fabricVersion = fabricJson.id;
+    
+    return merged;
   }
   
   /**

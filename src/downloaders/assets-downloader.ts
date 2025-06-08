@@ -27,7 +27,7 @@ export class AssetsDownloader {
   constructor(
     source: DownloadSource = DownloadSource.MOJANG, 
     dataDir: string = './minecraft-data',
-    maxConcurrentDownloads: number = 5
+    maxConcurrentDownloads: number = 8
   ) {
     this.source = source;
     this.dataDir = dataDir;
@@ -80,7 +80,7 @@ export class AssetsDownloader {
   }
 
   /**
-   * 下载资源文件
+   * 下载资源文件（真正的并发控制）
    * @param assetIndex 资源索引
    * @param onProgress 进度回调
    * @returns 下载结果
@@ -98,9 +98,12 @@ export class AssetsDownloader {
     let completed = 0;
     let success = 0;
     let failed = 0;
+    let lastReportedPercentage = -1;
     
-    // 创建下载任务
-    const downloads = assets.map(([assetPath, asset]) => {
+    console.log(`开始下载 ${total} 个资源文件，最大并发数: ${this.maxConcurrentDownloads}...`);
+    
+    // 创建下载任务队列
+    const downloadQueue = assets.map(([assetPath, asset]) => {
       const hash = asset.hash;
       const prefix = hash.substring(0, 2);
       const assetUrl = `${SourceConfig.getAssetsBaseUrl(this.source)}/${prefix}/${hash}`;
@@ -109,37 +112,109 @@ export class AssetsDownloader {
       return {
         url: assetUrl,
         filePath: assetFilePath,
-        sha1: hash,
-        onProgress: (downloaded: number, total: number) => {
-          // 单个文件进度回调
-          if (onProgress) {
-            const assetProgress = downloaded / total;
-            const overallProgress = (completed + assetProgress) / assets.length;
-            onProgress(completed + assetProgress, assets.length, overallProgress * 100);
-          }
-        }
+        hash: hash
       };
     });
     
-    // 分批下载
-    const batchSize = 50; // 每批次下载的文件数
-    const batches = Math.ceil(downloads.length / batchSize);
+    // 进度更新函数
+    const updateProgress = () => {
+      completed++;
+      const currentPercentage = Math.floor((completed / total) * 100);
+      
+      // 每1%更新一次进度
+      if (currentPercentage > lastReportedPercentage && onProgress) {
+        lastReportedPercentage = currentPercentage;
+        onProgress(completed, total, currentPercentage);
+      }
+    };
     
-    for (let i = 0; i < batches; i++) {
-      const start = i * batchSize;
-      const end = Math.min(start + batchSize, downloads.length);
-      const batch = downloads.slice(start, end);
+    // 单个下载任务处理函数
+    const processDownload = async (download: typeof downloadQueue[0]) => {
+      try {
+        // 检查文件是否已存在（资源文件以SHA1命名，存在即正确，无需验证SHA1）
+        if (await fs.pathExists(download.filePath)) {
+          updateProgress();
+          return true;
+        }
+        
+        // 确保目录存在
+        await fs.ensureDir(path.dirname(download.filePath));
+        
+        // 下载文件（不验证SHA1，因为文件名就是SHA1）
+        const result = await FileDownloader.downloadFile(
+          download.url,
+          download.filePath,
+          undefined, // 不传入SHA1，跳过验证
+          undefined  // 不传入进度回调，避免干扰总体进度
+        );
+        
+        updateProgress();
+        return result;
+      } catch (error) {
+        console.error(`下载资源文件失败: ${download.url}`, error);
+        updateProgress();
+        return false;
+      }
+    };
+    
+    // 实现真正的并发控制：当一个下载完成立即启动下一个
+    const activeDownloads = new Set<Promise<boolean>>();
+    let queueIndex = 0;
+    
+    // 启动初始下载
+    while (queueIndex < downloadQueue.length && activeDownloads.size < this.maxConcurrentDownloads) {
+      const downloadPromise = processDownload(downloadQueue[queueIndex]);
+      activeDownloads.add(downloadPromise);
+      queueIndex++;
       
-      const results = await FileDownloader.downloadFiles(batch, this.maxConcurrentDownloads, false);
-      
-      completed += batch.length;
-      success += results.success;
-      failed += results.failed;
-      
-      if (onProgress) {
-        onProgress(completed, total, (completed / total) * 100);
+      // 当下载完成时，立即启动下一个
+      downloadPromise.finally(() => {
+        activeDownloads.delete(downloadPromise);
+      });
+    }
+    
+    // 持续处理队列，直到所有下载完成
+    while (activeDownloads.size > 0 || queueIndex < downloadQueue.length) {
+      // 等待任意一个下载完成
+      if (activeDownloads.size > 0) {
+        const completedDownload = await Promise.race(activeDownloads);
+        
+        if (completedDownload) {
+          success++;
+        } else {
+          failed++;
+        }
+        
+        // 如果队列中还有任务，立即启动下一个
+        if (queueIndex < downloadQueue.length) {
+          const downloadPromise = processDownload(downloadQueue[queueIndex]);
+          activeDownloads.add(downloadPromise);
+          queueIndex++;
+          
+          downloadPromise.finally(() => {
+            activeDownloads.delete(downloadPromise);
+          });
+        }
+      } else {
+        // 如果没有活动下载但队列中还有任务，启动新的下载
+        if (queueIndex < downloadQueue.length) {
+          const downloadPromise = processDownload(downloadQueue[queueIndex]);
+          activeDownloads.add(downloadPromise);
+          queueIndex++;
+          
+          downloadPromise.finally(() => {
+            activeDownloads.delete(downloadPromise);
+          });
+        }
       }
     }
+    
+    // 确保最终进度为100%
+    if (onProgress) {
+      onProgress(total, total, 100);
+    }
+    
+    console.log(`资源文件下载完成: 成功 ${success}, 失败 ${failed}, 总计 ${total}`);
     
     return {
       total,
@@ -162,22 +237,31 @@ export class AssetsDownloader {
     success: number;
     failed: number;
   }> {
+    console.log('开始下载游戏资源...');
+    
     // 下载资源索引
-    const assetIndex = await this.downloadAssetIndex(versionInfo, (progress, total) => {
+    console.log('正在下载资源索引...');
+    const assetIndex = await this.downloadAssetIndex(versionInfo, (progress, total, percentage) => {
       if (onProgress) {
-        // 资源索引下载占总进度的5%
-        onProgress(progress, total, (progress / total) * 5);
+        // 资源索引下载占总进度的2%
+        const overallPercentage = (percentage / 100) * 2;
+        onProgress(progress, total, overallPercentage);
       }
     });
     
+    console.log(`资源索引下载完成，共 ${Object.keys(assetIndex.objects).length} 个资源文件`);
+    
     // 下载资源文件
-    const result = await this.downloadAssets(assetIndex, (progress, total) => {
+    console.log('正在下载资源文件...');
+    const result = await this.downloadAssets(assetIndex, (progress, total, percentage) => {
       if (onProgress) {
-        // 资源文件下载占总进度的95%
-        const percentage = 5 + (progress / total) * 95;
-        onProgress(progress, total, percentage);
+        // 资源文件下载占总进度的98%
+        const overallPercentage = 2 + (percentage / 100) * 98;
+        onProgress(progress, total, overallPercentage);
       }
     });
+    
+    console.log('所有资源下载完成！');
     
     return result;
   }

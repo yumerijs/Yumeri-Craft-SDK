@@ -14,6 +14,7 @@ async function main() {
   
   // 指定Minecraft版本
   const mcVersion = '1.20.1';
+  const versionName = 'minecraft-1.20.1';
   
   try {
     // 示例1：安装Forge
@@ -25,9 +26,9 @@ async function main() {
       const latestForge = forgeVersions[0];
       console.log(`选择Forge版本: ${latestForge.version} (构建号: ${latestForge.build})`);
       
-      // 安装Forge
+      // 安装Forge到指定版本
       console.log(`开始安装Forge ${latestForge.version}...`);
-      const forgeResult = await downloader.installForge(latestForge, 'java', (progress, total, percentage) => {
+      const forgeResult = await downloader.installForge(latestForge, versionName, 'java', (progress, total, percentage) => {
         console.log(`Forge安装进度: ${percentage}%`);
       });
       
@@ -51,9 +52,9 @@ async function main() {
       const stableFabric = fabricVersions.find(v => v.stable) || fabricVersions[0];
       console.log(`选择Fabric版本: ${stableFabric.loaderVersion}`);
       
-      // 安装Fabric
+      // 安装Fabric到指定版本
       console.log(`开始安装Fabric ${stableFabric.loaderVersion}...`);
-      const fabricResult = await downloader.installFabric(stableFabric, '1.21.5', (progress, total, percentage) => {
+      const fabricResult = await downloader.installFabric(stableFabric, versionName, (progress, total, percentage) => {
         console.log(`Fabric安装进度: ${percentage}%`);
       });
       

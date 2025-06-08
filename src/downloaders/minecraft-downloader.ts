@@ -52,6 +52,7 @@ export class MinecraftDownloader {
   /**
    * 下载Minecraft客户端
    * @param versionId 版本ID
+   * @param versionName 版本名称
    * @param onProgress 进度回调
    * @returns 下载结果
    */
@@ -75,6 +76,9 @@ export class MinecraftDownloader {
       if (!clientResult.success) {
         return clientResult;
       }
+      
+      // 保存版本JSON文件
+      await this.saveVersionJson(versionInfo, versionName);
       
       // 下载库文件
       const librariesResult = await this.librariesDownloader.downloadLibraries(versionInfo, versionName, (progress, total, percentage) => {
@@ -106,8 +110,25 @@ export class MinecraftDownloader {
   }
 
   /**
+   * 保存版本JSON文件
+   * @param versionInfo 版本信息
+   * @param versionName 版本名称
+   */
+  private async saveVersionJson(versionInfo: VersionInfo, versionName: string): Promise<void> {
+    const versionDir = path.join(this.dataDir, 'versions', versionName);
+    const versionJsonPath = path.join(versionDir, `${versionName}.json`);
+    
+    // 确保目录存在
+    await fs.ensureDir(versionDir);
+    
+    // 保存版本JSON
+    await fs.writeJson(versionJsonPath, versionInfo, { spaces: 2 });
+  }
+
+  /**
    * 下载客户端JAR文件
    * @param versionInfo 版本信息
+   * @param versionName 版本名称
    * @param onProgress 进度回调
    * @returns 下载结果
    */
@@ -155,6 +176,7 @@ export class MinecraftDownloader {
   /**
    * 下载服务端JAR文件
    * @param versionId 版本ID
+   * @param versionName 版本名称
    * @param onProgress 进度回调
    * @returns 下载结果
    */
@@ -220,18 +242,20 @@ export class MinecraftDownloader {
   }
 
   /**
-   * 安装Forge
+   * 安装Forge到指定版本
    * @param forgeVersion Forge版本
+   * @param targetVersionName 目标版本名称
    * @param javaPath Java路径
    * @param onProgress 进度回调
    * @returns 安装结果
    */
   public async installForge(
     forgeVersion: ForgeVersion,
+    targetVersionName: string,
     javaPath: string = 'java',
     onProgress?: ProgressCallback
   ): Promise<ForgeInstallResult> {
-    return this.forgeInstaller.installForge(forgeVersion, javaPath, onProgress);
+    return this.forgeInstaller.installForge(forgeVersion, targetVersionName, javaPath, onProgress);
   }
 
   /**
@@ -244,17 +268,18 @@ export class MinecraftDownloader {
   }
 
   /**
-   * 安装Fabric
+   * 安装Fabric到指定版本
    * @param fabricVersion Fabric版本
+   * @param targetVersionName 目标版本名称
    * @param onProgress 进度回调
    * @returns 安装结果
    */
   public async installFabric(
     fabricVersion: FabricVersion,
-    mcpath: string,
+    targetVersionName: string,
     onProgress?: ProgressCallback
   ): Promise<FabricInstallResult> {
-    return this.fabricInstaller.installFabric(fabricVersion, mcpath, onProgress);
+    return this.fabricInstaller.installFabric(fabricVersion, targetVersionName, onProgress);
   }
 
   /**

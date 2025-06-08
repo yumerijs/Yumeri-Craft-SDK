@@ -473,3 +473,155 @@ export interface FabricInstallResult {
   versionJsonPath?: string;
 }
 
+/**
+ * 启动参数配置（支持动态参数）
+ */
+export interface LaunchArguments {
+  /**
+   * 用户名
+   */
+  username?: string;
+  
+  /**
+   * 访问令牌
+   */
+  accessToken?: string;
+  
+  /**
+   * 用户UUID
+   */
+  uuid?: string;
+  
+  /**
+   * 用户类型（默认为mojang）
+   */
+  userType?: string;
+  
+  /**
+   * 游戏目录
+   */
+  gameDirectory?: string;
+  
+  /**
+   * 资源目录
+   */
+  assetsDirectory?: string;
+  
+  /**
+   * 资源索引名称
+   */
+  assetIndex?: string;
+  
+  /**
+   * 版本名称
+   */
+  versionName?: string;
+  
+  /**
+   * 版本类型
+   */
+  versionType?: string;
+  
+  /**
+   * 窗口宽度
+   */
+  width?: number;
+  
+  /**
+   * 窗口高度
+   */
+  height?: number;
+  
+  /**
+   * 是否全屏
+   */
+  fullscreen?: boolean;
+  
+  /**
+   * 服务器地址
+   */
+  serverHost?: string;
+  
+  /**
+   * 服务器端口
+   */
+  serverPort?: number;
+  
+  /**
+   * 代理主机
+   */
+  proxyHost?: string;
+  
+  /**
+   * 代理端口
+   */
+  proxyPort?: number;
+  
+  /**
+   * 代理用户
+   */
+  proxyUser?: string;
+  
+  /**
+   * 代理密码
+   */
+  proxyPass?: string;
+  
+  /**
+   * 自定义JVM参数
+   */
+  customJvmArgs?: string[];
+  
+  /**
+   * 自定义游戏参数
+   */
+  customGameArgs?: string[];
+  
+  /**
+   * 最大内存（MB）
+   */
+  maxMemory?: number;
+  
+  /**
+   * 最小内存（MB）
+   */
+  minMemory?: number;
+  
+  /**
+   * 动态参数支持：允许任意字符串键值对
+   * 这样可以支持未来新增的占位符，无需修改类型定义
+   */
+  [key: string]: string | number | boolean | string[] | undefined;
+}
+
+/**
+ * 启动结果
+ */
+export interface LaunchResult {
+  /**
+   * 是否成功
+   */
+  success: boolean;
+  
+  /**
+   * 错误信息
+   */
+  error?: string;
+  
+  /**
+   * 进程ID
+   */
+  pid?: number;
+  
+  /**
+   * 启动命令
+   */
+  command?: string;
+  
+  /**
+   * 子进程对象
+   */
+  process?: any;
+}
+
+

@@ -461,7 +461,7 @@ export class LibrariesDownloader {
         url: d.url,
         filePath: d.filePath,
         sha1: d.sha1,
-        onProgress: (dl, tot) => { /* 内部进度 */ }
+        onProgress: (dl: number, tot: number) => { /* 内部进度 */ }
       }));
 
       const results = await FileDownloader.downloadFiles(downloads, this.maxConcurrentDownloads);
@@ -475,7 +475,7 @@ export class LibrariesDownloader {
     // --- 2. 下载并解压原生库 ---
     if (nativeLibrariesToDownload.length > 0) {
       console.log(`Downloading and extracting ${nativeLibrariesToDownload.length} native libraries...`);
-      const nativeExtractedDir = path.join(this.dataDir, 'versions', versionName, `${versionName}-natives`);
+      const nativeExtractedDir = path.resolve(this.dataDir, 'versions', versionName, `${versionName}-natives`);
 
       const nativeResults = await this.downloadAndExtractNatives(
         nativeLibrariesToDownload,

@@ -7,8 +7,7 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "ts-node src/test.ts",
-    "example": "ts-node examples/download-client.ts",
+    "test": "ts-node src/test-improved.ts",
     "pack": "npm pack"
   },
   "keywords": [
