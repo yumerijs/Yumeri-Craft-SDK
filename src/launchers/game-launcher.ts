@@ -3,20 +3,25 @@ import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import { LaunchArguments, LaunchResult, ProgressCallback } from '../types';
 
+interface LauncherConfigure {
+  launcherVersion?: string;
+  launcherName?: string;
+}
 /**
  * Minecraft游戏启动器（修复版）
  */
 export class GameLauncher {
   private dataDir: string;
-  
+  private configure: LauncherConfigure = {};
   /**
    * 构造函数
    * @param dataDir 数据目录
    */
-  constructor(dataDir: string = './minecraft-data') {
+  constructor(dataDir: string = './minecraft-data', configure: LauncherConfigure = {}) {
     this.dataDir = dataDir;
+    this.configure = configure;
   }
-  
+
   /**
    * 启动Minecraft游戏
    * @param versionName 版本名称
@@ -37,87 +42,88 @@ export class GameLauncher {
       if (onProgress) {
         onProgress(0, 100, 0);
       }
-      
+
       // 读取版本JSON文件
       const versionJsonPath = path.join(this.dataDir, 'versions', versionName, `${versionName}.json`);
       if (!await fs.pathExists(versionJsonPath)) {
         throw new Error(`版本JSON文件不存在: ${versionJsonPath}`);
       }
-      
+
       const versionJson = await fs.readJson(versionJsonPath);
-      
+
       if (onProgress) {
         onProgress(10, 100, 10);
       }
-      
+
       // 构建类路径
       const classpath = await this.buildClasspath(versionJson, versionName);
-      
+
       if (onProgress) {
         onProgress(30, 100, 30);
       }
-      
+
       // 构建JVM参数
       const jvmArgs = this.buildJvmArguments(versionJson, launchArgs, classpath);
-      
+
       if (onProgress) {
         onProgress(50, 100, 50);
       }
-      
+
       // 构建游戏参数
       const gameArgs = this.buildGameArguments(versionJson, launchArgs);
-      
+
       if (onProgress) {
         onProgress(70, 100, 70);
       }
-      
+
       // 构建完整的启动命令
       const args = [
         ...jvmArgs,
         versionJson.mainClass,
         ...gameArgs
       ];
-      
+
       if (onProgress) {
         onProgress(90, 100, 90);
       }
-      
+
       // 启动游戏进程
       const gameProcess = spawn(javaPath, args, {
-        cwd: launchArgs.gameDirectory,
+        // cwd: launchArgs.gameDirectory,
+        cwd: process.cwd(), // 使用当前工作目录
         stdio: ['pipe', 'pipe', 'pipe']
       });
-      
+
       // 处理日志输出
       if (onLog) {
         gameProcess.stdout?.on('data', (data) => {
           onLog(`[STDOUT] ${data.toString()}`);
         });
-        
+
         gameProcess.stderr?.on('data', (data) => {
           onLog(`[STDERR] ${data.toString()}`);
         });
-        
+
         gameProcess.on('close', (code) => {
           onLog(`[PROCESS] 游戏进程退出，退出码: ${code}`);
         });
-        
+
         gameProcess.on('error', (error) => {
           onLog(`[ERROR] 进程错误: ${error.message}`);
         });
       }
-      
+
       if (onProgress) {
         onProgress(100, 100, 100);
       }
-      
+
       return {
         success: true,
         pid: gameProcess.pid,
         process: gameProcess,
         command: `${javaPath} ${args.join(' ')}`
       };
-      
+
     } catch (error) {
       return {
         success: false,
@@ -125,7 +131,7 @@ export class GameLauncher {
       };
     }
   }
-  
+
   /**
    * 构建类路径
    * @param versionJson 版本JSON
@@ -134,11 +140,11 @@ export class GameLauncher {
    */
   private async buildClasspath(versionJson: any, versionName: string): Promise<string> {
     const classpathEntries: string[] = [];
-    
+
     // 添加主JAR文件
     const mainJarPath = path.join(this.dataDir, 'versions', versionName, `${versionName}.jar`);
     classpathEntries.push(mainJarPath);
-    
+
     // 添加库文件
     if (versionJson.libraries) {
       for (const library of versionJson.libraries) {
@@ -146,12 +152,12 @@ export class GameLauncher {
         if (library.rules && !this.evaluateRules(library.rules)) {
           continue;
         }
-        
+
         // 跳过原生库
-        if (library.natives) {
+        if (library.name.includes('natives')) {
           continue;
         }
-        
+
         // 构建库文件路径
         const artifact = library.downloads?.artifact;
         if (artifact) {
@@ -160,10 +166,10 @@ export class GameLauncher {
         }
       }
     }
-    
+
     return classpathEntries.join(path.delimiter);
   }
-  
+
   /**
    * 构建JVM参数（修复重复-cp问题）
    * @param versionJson 版本JSON
@@ -173,7 +179,7 @@ export class GameLauncher {
    */
   private buildJvmArguments(versionJson: any, launchArgs: LaunchArguments, classpath: string): string[] {
     const jvmArgs: string[] = [];
-    
+
     // 添加内存参数
     if (launchArgs.minMemory) {
       jvmArgs.push(`-Xms${launchArgs.minMemory}m`);
@@ -181,24 +187,24 @@ export class GameLauncher {
     if (launchArgs.maxMemory) {
       jvmArgs.push(`-Xmx${launchArgs.maxMemory}m`);
     }
-    
+
     // 处理版本JSON中的JVM参数（跳过单独的-cp）
     if (versionJson.arguments && versionJson.arguments.jvm) {
       const processedArgs = this.processArgumentArray(versionJson.arguments.jvm, launchArgs, true);
       jvmArgs.push(...processedArgs);
     }
-    
+
     // 添加类路径（确保只添加一次）
     jvmArgs.push('-cp', classpath);
-    
+
     // 添加自定义JVM参数
     if (launchArgs.customJvmArgs) {
       jvmArgs.push(...launchArgs.customJvmArgs);
     }
-    
+
     return jvmArgs;
   }
-  
+
   /**
    * 构建游戏参数
    * @param versionJson 版本JSON
@@ -207,7 +213,7 @@ export class GameLauncher {
    */
   private buildGameArguments(versionJson: any, launchArgs: LaunchArguments): string[] {
     const gameArgs: string[] = [];
-    
+
     // 处理新版本的arguments格式
     if (versionJson.arguments && versionJson.arguments.game) {
       const processedArgs = this.processArgumentArray(versionJson.arguments.game, launchArgs, false);
@@ -219,15 +225,15 @@ export class GameLauncher {
       const processedArgs = this.processArgumentArray(args, launchArgs, false);
       gameArgs.push(...processedArgs);
     }
-    
+
     // 添加自定义游戏参数
     if (launchArgs.customGameArgs) {
       gameArgs.push(...launchArgs.customGameArgs);
     }
-    
+
     return gameArgs;
   }
-  
+
   /**
    * 处理参数数组（修复版，正确处理rules和占位符）
    * @param argumentArray 参数数组
@@ -237,7 +243,7 @@ export class GameLauncher {
    */
   private processArgumentArray(argumentArray: any[], launchArgs: LaunchArguments, isJvmArgs: boolean): string[] {
     const result: string[] = [];
-    
+
     for (const arg of argumentArray) {
       if (typeof arg === 'string') {
         // 处理字符串参数
@@ -245,7 +251,7 @@ export class GameLauncher {
           // 跳过JVM参数中单独的-cp，我们会在后面统一添加
           continue;
         }
-        
+
         const processedArg = this.replaceArguments(arg, launchArgs);
         if (processedArg !== null) {
           result.push(processedArg);
@@ -267,10 +273,10 @@ export class GameLauncher {
         }
       }
     }
-    
+
     return result;
   }
-  
+
   /**
    * 处理复杂参数值（数组形式）
    * @param valueArray 参数值数组
@@ -280,10 +286,10 @@ export class GameLauncher {
   private processComplexArgumentValue(valueArray: any[], launchArgs: LaunchArguments): string[] {
     const result: string[] = [];
     let i = 0;
-    
+
     while (i < valueArray.length) {
       const current = valueArray[i];
-      
+
       if (typeof current === 'string') {
         if (current.startsWith('--') && i + 1 < valueArray.length) {
           // 这是一个参数名，检查下一个是否为占位符
@@ -315,10 +321,10 @@ export class GameLauncher {
         i++;
       }
     }
-    
+
     return result;
   }
-  
+
   /**
    * 替换参数中的占位符（动态匹配，不预定义）
    * @param arg 原始参数
@@ -328,36 +334,41 @@ export class GameLauncher {
   private replaceArguments(arg: string, launchArgs: LaunchArguments): string | null {
     let result = arg;
     let hasUnresolvedPlaceholder = false;
-    
+
     // 查找所有占位符 ${xxx}
     const placeholderRegex = /\$\{([^}]+)\}/g;
-    let match;
-    
+    let match: any[];
+
     while ((match = placeholderRegex.exec(arg)) !== null) {
       const fullPlaceholder = match[0]; // ${xxx}
       const placeholderKey = match[1];  // xxx
-      
+
       // 动态从launchArgs中查找对应的属性值
       let replacementValue: string | undefined;
-      
+
       // 特殊处理一些固定的系统占位符
       if (placeholderKey === 'natives_directory') {
-        replacementValue = path.join(this.dataDir, 'natives');
+        // replacementValue = launchArgs.natives_directory as string;
+        replacementValue = launchArgs.natives_directory as string || path.join(launchArgs.gameDirectory || this.dataDir, 'versions', launchArgs.versionName, `${launchArgs.versionName}-natives`);
       } else if (placeholderKey === 'launcher_name') {
-        replacementValue = 'minecraft-launcher-sdk';
+        replacementValue = this.configure.launcherName || 'minecraft-launcher-sdk';
       } else if (placeholderKey === 'launcher_version') {
-        replacementValue = '1.0.0';
+        replacementValue = this.configure.launcherVersion || '1.0.0';
       } else if (placeholderKey === 'classpath') {
         // classpath在JVM参数中单独处理，这里跳过
         return null;
+      } else if (placeholderKey === 'assets_root') {
+        replacementValue = path.join(launchArgs.assetsDirectory || this.dataDir, 'assets');
+      } else if (placeholderKey === 'game_directory') {
+        replacementValue = launchArgs.gameDirectory || this.dataDir;
       } else {
         // 动态查找launchArgs中的属性
         // 支持多种命名格式的映射
         const propertyMappings: Record<string, keyof LaunchArguments> = {
           'auth_player_name': 'username',
           'version_name': 'versionName',
-          'game_directory': 'gameDirectory',
-          'assets_root': 'assetsDirectory',
+          // 'game_directory': 'gameDirectory',
+          // 'assets_root': 'assetsDirectory',
           'assets_index_name': 'assetIndex',
           'auth_uuid': 'uuid',
           'auth_access_token': 'accessToken',
@@ -370,9 +381,10 @@ export class GameLauncher {
           'quickPlayPath': 'quickPlayPath',
           'quickPlaySingleplayer': 'quickPlaySingleplayer',
           'quickPlayMultiplayer': 'quickPlayMultiplayer',
-          'quickPlayRealms': 'quickPlayRealms'
+          'quickPlayRealms': 'quickPlayRealms',
+          'natives_directory': 'nativesdirectory'
         };
-        
+
         // 首先尝试直接匹配
         const directKey = placeholderKey as keyof LaunchArguments;
         if (directKey in launchArgs) {
@@ -386,7 +398,7 @@ export class GameLauncher {
           replacementValue = value?.toString();
         }
       }
-      
+
       // 检查是否找到了有效的替换值
       if (replacementValue !== undefined && replacementValue !== '') {
         // 有值，进行替换
@@ -396,15 +408,15 @@ export class GameLauncher {
         hasUnresolvedPlaceholder = true;
       }
     }
-    
+
     // 如果有无法解析的占位符，返回null（表示删除这个参数）
     if (hasUnresolvedPlaceholder) {
       return null;
     }
-    
+
     return result;
   }
-  
+
   /**
    * 评估规则（支持features）
    * @param rules 规则数组
@@ -412,46 +424,46 @@ export class GameLauncher {
    */
   private evaluateRules(rules: any[]): boolean {
     let allowed = false;
-    
+
     for (const rule of rules) {
       if (rule.action === 'allow') {
         let matches = true;
-        
+
         // 检查操作系统规则
         if (rule.os && !this.matchesOs(rule.os)) {
           matches = false;
         }
-        
+
         // 检查features规则
         if (rule.features && !this.matchesFeatures(rule.features)) {
           matches = false;
         }
-        
+
         if (matches) {
           allowed = true;
         }
       } else if (rule.action === 'disallow') {
         let matches = true;
-        
+
         // 检查操作系统规则
         if (rule.os && !this.matchesOs(rule.os)) {
           matches = false;
         }
-        
+
         // 检查features规则
         if (rule.features && !this.matchesFeatures(rule.features)) {
           matches = false;
         }
-        
+
         if (matches) {
           allowed = false;
         }
       }
     }
-    
+
     return allowed;
   }
-  
+
   /**
    * 检查操作系统是否匹配
    * @param osRule 操作系统规则
@@ -459,7 +471,7 @@ export class GameLauncher {
    */
   private matchesOs(osRule: any): boolean {
     const platform = process.platform;
-    
+
     if (osRule.name) {
       switch (osRule.name) {
         case 'windows':
@@ -472,10 +484,10 @@ export class GameLauncher {
           return false;
       }
     }
-    
+
     return true;
   }
-  
+
   /**
    * 检查features是否匹配
    * @param featuresRule features规则
@@ -485,16 +497,16 @@ export class GameLauncher {
     // 这里可以根据实际需求实现features检查
     // 目前简单返回false，表示不启用这些特殊功能
     // 如果需要启用某些功能，可以在这里添加逻辑
-    
+
     // 例如：如果有分辨率参数，启用自定义分辨率功能
     if (featuresRule.has_custom_resolution) {
       return false; // 暂时禁用，避免空参数
     }
-    
+
     // 其他features默认不启用
     return false;
   }
-  
+
   /**
    * 设置数据目录
    * @param dataDir 数据目录
@@ -502,7 +514,7 @@ export class GameLauncher {
   public setDataDir(dataDir: string): void {
     this.dataDir = dataDir;
   }
-  
+
   /**
    * 获取数据目录
    * @returns 数据目录

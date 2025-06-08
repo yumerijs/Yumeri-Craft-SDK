@@ -68,50 +68,50 @@ async function testImprovedSDK() {
     //   console.log(`Forge测试跳过: ${error}`);
     // }
 
-    // 测试3：获取并安装Fabric
-    console.log('\n=== 测试3：安装Fabric模组加载器 ===');
-    try {
-      console.log(`正在获取Minecraft ${versionId}的Fabric版本列表...`);
-      const fabricVersions = await downloader.getFabricVersions(versionId);
+    // // 测试3：获取并安装Fabric
+    // console.log('\n=== 测试3：安装Fabric模组加载器 ===');
+    // try {
+    //   console.log(`正在获取Minecraft ${versionId}的Fabric版本列表...`);
+    //   const fabricVersions = await downloader.getFabricVersions(versionId);
       
-      if (fabricVersions.length > 0) {
-        // 选择稳定版本或第一个版本
-        const stableFabric = fabricVersions.find(v => v.stable) || fabricVersions[0];
-        console.log(`选择Fabric版本: ${stableFabric.loaderVersion}`);
+    //   if (fabricVersions.length > 0) {
+    //     // 选择稳定版本或第一个版本
+    //     const stableFabric = fabricVersions.find(v => v.stable) || fabricVersions[0];
+    //     console.log(`选择Fabric版本: ${stableFabric.loaderVersion}`);
         
-        // 为Fabric创建一个新的版本名称
-        const fabricVersionName = `${versionName}-fabric`;
+    //     // 为Fabric创建一个新的版本名称
+    //     const fabricVersionName = `${versionName}-fabric`;
         
-        // 先复制原版本文件夹
+    //     // 先复制原版本文件夹
         
-        const path = require('path');
-        const originalDir = path.join('./test-minecraft-data/versions', versionName);
-        const fabricDir = path.join('./test-minecraft-data/versions', fabricVersionName);
+    //     const path = require('path');
+    //     const originalDir = path.join('./test-minecraft-data/versions', versionName);
+    //     const fabricDir = path.join('./test-minecraft-data/versions', fabricVersionName);
         
-        if (await fs.pathExists(originalDir)) {
-          await fs.copy(originalDir, fabricDir);
-          console.log(`已复制版本文件夹到: ${fabricVersionName}`);
-        }
-        await fs.copy(path.join(originalDir, `${versionName}.json`), path.join(fabricDir, `${fabricVersionName}.json`));
+    //     if (await fs.pathExists(originalDir)) {
+    //       await fs.copy(originalDir, fabricDir);
+    //       console.log(`已复制版本文件夹到: ${fabricVersionName}`);
+    //     }
+    //     await fs.copy(path.join(originalDir, `${versionName}.json`), path.join(fabricDir, `${fabricVersionName}.json`));
         
-        console.log(`正在安装Fabric到版本 ${fabricVersionName}...`);
-        const fabricResult = await downloader.installFabric(stableFabric, fabricVersionName, (progress, total, percentage) => {
-          console.log(`Fabric安装进度: ${Math.round(percentage)}% (${progress}/${total})`);
-        });
+    //     console.log(`正在安装Fabric到版本 ${fabricVersionName}...`);
+    //     const fabricResult = await downloader.installFabric(stableFabric, fabricVersionName, (progress, total, percentage) => {
+    //       console.log(`Fabric安装进度: ${Math.round(percentage)}% (${progress}/${total})`);
+    //     });
         
-        if (fabricResult.success) {
-          console.log(`✓ Fabric安装成功!`);
-          console.log(`版本ID: ${fabricResult.versionId}`);
-          console.log(`版本JSON路径: ${fabricResult.versionJsonPath}`);
-        } else {
-          console.log(`✗ Fabric安装失败: ${fabricResult.error}`);
-        }
-      } else {
-        console.log(`未找到Minecraft ${versionId}的Fabric版本`);
-      }
-    } catch (error) {
-      console.log(`Fabric测试跳过: ${error}`);
-    }
+    //     if (fabricResult.success) {
+    //       console.log(`✓ Fabric安装成功!`);
+    //       console.log(`版本ID: ${fabricResult.versionId}`);
+    //       console.log(`版本JSON路径: ${fabricResult.versionJsonPath}`);
+    //     } else {
+    //       console.log(`✗ Fabric安装失败: ${fabricResult.error}`);
+    //     }
+    //   } else {
+    //     console.log(`未找到Minecraft ${versionId}的Fabric版本`);
+    //   }
+    // } catch (error) {
+    //   console.log(`Fabric测试跳过: ${error}`);
+    // }
 
     // 测试4：测试启动逻辑（不实际启动游戏）
     console.log('\n=== 测试2：测试修复后的启动器（完整参数） ===');
@@ -121,9 +121,7 @@ async function testImprovedSDK() {
         accessToken: '0',
         uuid: 'test-uuid-1234-5678-9012-345678901234',
         userType: 'Legacy',
-        gameDirectory: './test-minecraft-data',
-        assetsDirectory: './test-minecraft-data/assets',
-        assetIndex: '1.20',
+        assetIndex: '5',
         versionName: versionName,
         versionType: 'release',
         width: 1920,
@@ -136,7 +134,7 @@ async function testImprovedSDK() {
       const fullResult = await launcher.launchGame(
         versionName, 
         fullArgs, 
-        'echo', // 使用echo命令进行测试，避免实际启动游戏
+        'java',
         (progress, total, percentage) => {
           console.log(`启动准备进度: ${Math.round(percentage)}%`);
         },
@@ -158,6 +156,7 @@ async function testImprovedSDK() {
         console.log(`- 没有重复的-cp: ${!command.includes('-cp -cp')}`);
         console.log(`- 没有未解析占位符: ${!command.includes('${')}`);
         console.log(`- 没有空参数: ${!command.includes('--clientId --') && !command.includes('--xuid --')}`);
+        console.log(`启动命令: ${command}`);
         
         // 显示启动命令的关键部分
         const args = command.split(' ');
