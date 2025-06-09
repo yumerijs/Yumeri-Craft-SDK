@@ -35,7 +35,7 @@ export class FileDownloader {
       }
       
       // 选择协议
-      const protocol = url.startsWith('https:' ) ? https : http;
+      const protocol = url.startsWith('https:') ? https : http;
       
       return new Promise<boolean>((resolve, reject ) => {
         const request = protocol.get(url, (response) => {
@@ -132,7 +132,7 @@ export class FileDownloader {
         });
         
         // 设置超时
-        request.setTimeout(30000, () => {
+        request.setTimeout(60000, () => { // 将超时时间增加到60秒
           request.destroy();
           reject(new Error('下载超时'));
         });
@@ -204,50 +204,58 @@ export class FileDownloader {
     let successCount = 0;
     let failedCount = 0;
     
-    // 创建下载队列
-    const queue = [...downloads];
-    const activeDownloads = new Set<string>();
-    
-    // 处理队列
-    while (queue.length > 0 || activeDownloads.size > 0) {
-      // 填充活动下载，直到达到最大并发数
-      while (queue.length > 0 && activeDownloads.size < maxConcurrent) {
-        const download = queue.shift()!;
-        activeDownloads.add(download.url);
-        
-        // 执行下载
-        this.downloadFile(download.url, download.filePath, verifySha1 ? download.sha1 : undefined, download.onProgress)
-          .then((success) => {
-            results.push({
-              url: download.url,
-              filePath: download.filePath,
-              success
-            });
-            
-            if (success) {
-              successCount += 1;
-            } else {
-              failedCount += 1;
-            }
-          })
-          .catch(() => {
-            results.push({
-              url: download.url,
-              filePath: download.filePath,
-              success: false
-            });
-            failedCount += 1;
-          })
-          .finally(() => {
-            activeDownloads.delete(download.url);
+    const downloadPromises: Promise<void>[] = [];
+    let activeDownloads = 0;
+    let currentIndex = 0;
+
+    const processNext = async () => {
+      if (currentIndex < downloads.length) {
+        const download = downloads[currentIndex];
+        currentIndex++;
+        activeDownloads++;
+
+        try {
+          const success = await this.downloadFile(download.url, download.filePath, verifySha1 ? download.sha1 : undefined, download.onProgress);
+          results.push({
+            url: download.url,
+            filePath: download.filePath,
+            success
           });
+          if (success) {
+            successCount++;
+          } else {
+            failedCount++;
+          }
+        } catch (error) {
+          results.push({
+            url: download.url,
+            filePath: download.filePath,
+            success: false
+          });
+          failedCount++;
+        } finally {
+          activeDownloads--;
+          processNext(); // 递归调用以处理下一个任务
+        }
       }
-      
-      // 等待一小段时间
-      if (activeDownloads.size >= maxConcurrent || (queue.length === 0 && activeDownloads.size > 0)) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+    };
+
+    // 启动初始的并发下载
+    for (let i = 0; i < maxConcurrent && i < downloads.length; i++) {
+      downloadPromises.push(processNext());
     }
+
+    // 等待所有下载完成
+    await new Promise<void>(resolve => {
+      const checkCompletion = () => {
+        if (activeDownloads === 0 && currentIndex === downloads.length) {
+          resolve();
+        } else {
+          setTimeout(checkCompletion, 100); // 持续检查
+        }
+      };
+      checkCompletion();
+    });
     
     return {
       success: successCount,
@@ -256,3 +264,5 @@ export class FileDownloader {
     };
   }
 }
+
+

@@ -30,6 +30,11 @@ export interface FabricVersion {
   downloadUrl: string;
   
   /**
+   * JAR下载URL
+   */
+  jarUrl?: string;
+  
+  /**
    * 是否为稳定版本
    */
   stable?: boolean;
@@ -61,7 +66,7 @@ export interface FabricInstallResult {
 }
 
 /**
- * Fabric安装器
+ * Fabric安装器（修复版）
  */
 export class FabricInstaller {
   private dataDir: string;
@@ -118,6 +123,7 @@ export class FabricInstaller {
           mcVersion: mcVersion,
           loaderVersion: loaderVersion,
           downloadUrl: `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/json`,
+          jarUrl: `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loaderVersion}/profile/jar`,
           stable: item.loader.stable || false
         };
       });
@@ -164,15 +170,73 @@ export class FabricInstaller {
   }
   
   /**
+   * 下载Fabric API
+   * @param mcVersion Minecraft版本
+   * @param onProgress 进度回调
+   * @returns 下载的Fabric API文件路径
+   */
+  public async downloadFabricAPI(
+    mcVersion: string,
+    onProgress?: ProgressCallback
+  ): Promise<string[]> {
+    try {
+      // 获取Fabric API版本信息
+      const apiUrl = `https://api.modrinth.com/v2/project/fabric-api/version?game_versions=["${mcVersion}"]&loaders=["fabric"]`;
+      const response = await axios.get(apiUrl);
+      const versions = response.data;
+      
+      if (!versions || versions.length === 0) {
+        throw new Error(`未找到Minecraft ${mcVersion}的Fabric API版本`);
+      }
+      
+      // 选择最新版本
+      const latestVersion = versions[0];
+      const downloadedFiles: string[] = [];
+      
+      // 创建mods目录
+      const modsDir = path.join(this.dataDir, 'mods');
+      await fs.ensureDir(modsDir);
+      
+      // 下载所有文件
+      for (let i = 0; i < latestVersion.files.length; i++) {
+        const file = latestVersion.files[i];
+        if (file.primary || latestVersion.files.length === 1) {
+          const filePath = path.join(modsDir, file.filename);
+          
+          const success = await FileDownloader.downloadFile(
+            file.url,
+            filePath,
+            file.hashes?.sha1,
+            onProgress ? (progress, total, percentage) => {
+              onProgress(progress, total, percentage);
+            } : undefined
+          );
+          
+          if (success) {
+            downloadedFiles.push(filePath);
+          }
+        }
+      }
+      
+      return downloadedFiles;
+    } catch (error) {
+      console.error('下载Fabric API失败', error);
+      throw new Error('下载Fabric API失败');
+    }
+  }
+  
+  /**
    * 安装Fabric到指定版本文件夹
    * @param fabricVersion Fabric版本
    * @param targetVersionName 目标版本名称（现有版本文件夹名）
+   * @param downloadFabricAPI 是否下载Fabric API
    * @param onProgress 进度回调
    * @returns 安装结果
    */
   public async installFabric(
     fabricVersion: FabricVersion,
     targetVersionName: string,
+    downloadFabricAPI: boolean = true,
     onProgress?: ProgressCallback
   ): Promise<FabricInstallResult> {
     try {
@@ -185,7 +249,7 @@ export class FabricInstaller {
       const fabricProfileJson = await fs.readJson(profilePath);
       
       if (onProgress) {
-        onProgress(20, 100, 20);
+        onProgress(10, 100, 10);
       }
       
       // 使用现有版本文件夹
@@ -205,7 +269,7 @@ export class FabricInstaller {
       // 读取原版本JSON
       const originalVersionJson = await fs.readJson(originalJsonPath);
       
-      // 合并Fabric配置到原版本JSON
+      // 合并Fabric配置到原版本JSON（修复版）
       const mergedJson = this.mergeFabricConfig(originalVersionJson, fabricProfileJson);
       
       // 保存合并后的JSON到目标版本文件夹
@@ -213,7 +277,7 @@ export class FabricInstaller {
       await fs.writeJson(targetJsonPath, mergedJson, { spaces: 2 });
       
       if (onProgress) {
-        onProgress(30, 100, 30);
+        onProgress(20, 100, 20);
       }
       
       // 下载所有必要的库文件
@@ -249,13 +313,32 @@ export class FabricInstaller {
           
           downloadedLibraries++;
           if (onProgress) {
-            // 库文件下载占总进度的60%
-            const percentage = 30 + Math.round((downloadedLibraries / totalLibraries) * 60);
+            // 库文件下载占总进度的50%
+            const percentage = 20 + Math.round((downloadedLibraries / totalLibraries) * 50);
             onProgress(downloadedLibraries, totalLibraries, percentage);
           }
         } catch (libError) {
           console.error(`下载库文件失败: ${library.name}`, libError);
           // 继续下载其他库文件
+        }
+      }
+      
+      if (onProgress) {
+        onProgress(70, 100, 70);
+      }
+      
+      // 下载Fabric API（如果需要）
+      if (downloadFabricAPI) {
+        try {
+          await this.downloadFabricAPI(fabricVersion.mcVersion, (progress, total, percentage) => {
+            if (onProgress) {
+              // Fabric API下载占总进度的20%
+              const adjustedPercentage = 70 + Math.round(percentage * 0.2);
+              onProgress(progress, total, adjustedPercentage);
+            }
+          });
+        } catch (apiError) {
+          console.warn('下载Fabric API失败，但Fabric安装继续进行', apiError);
         }
       }
       
@@ -278,7 +361,7 @@ export class FabricInstaller {
   }
   
   /**
-   * 合并Fabric配置到原版本JSON
+   * 合并Fabric配置到原版本JSON（修复版，确保正确合并）
    * @param originalJson 原版本JSON
    * @param fabricJson Fabric版本JSON
    * @returns 合并后的JSON
@@ -286,14 +369,14 @@ export class FabricInstaller {
   private mergeFabricConfig(originalJson: any, fabricJson: any): any {
     const merged = { ...originalJson };
     
+    // 更新主类（Fabric的关键）
+    if (fabricJson.mainClass) {
+      merged.mainClass = fabricJson.mainClass;
+    }
+    
     // 合并库文件列表
     if (fabricJson.libraries) {
       merged.libraries = [...(merged.libraries || []), ...fabricJson.libraries];
-    }
-    
-    // 更新主类
-    if (fabricJson.mainClass) {
-      merged.mainClass = fabricJson.mainClass;
     }
     
     // 合并启动参数
@@ -327,6 +410,11 @@ export class FabricInstaller {
     
     // 保留Fabric版本信息
     merged.fabricVersion = fabricJson.id;
+    
+    // 确保ID正确
+    if (fabricJson.id) {
+      merged.id = fabricJson.id;
+    }
     
     return merged;
   }

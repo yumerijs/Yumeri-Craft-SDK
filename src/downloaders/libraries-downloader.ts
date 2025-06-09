@@ -498,7 +498,7 @@ export class LibrariesDownloader {
         console.log(`Attempting to clean and remove META-INF directory from ${nativeExtractedDir}`);
         try {
           // 先清空 META-INF 目录下的所有内容 (递归删除)
-          fs.emptyDir(metaInfPath);
+          // fs.emptyDir(metaInfPath);
           // 然后删除空的 META-INF 目录本身
           fs.remove(metaInfPath);
           console.log(`Removed META-INF directory: ${metaInfPath}`);

@@ -8,7 +8,8 @@
     "build": "tsc",
     "clean": "rm -rf dist",
     "test": "ts-node src/test-improved.ts",
-    "pack": "npm pack"
+    "pack": "npm pack",
+    "pub": "npm publish --registry=https://registry.npmjs.com --tag latest --access public"
   },
   "keywords": [
     "minecraft",

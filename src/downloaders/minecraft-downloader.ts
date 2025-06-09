@@ -279,7 +279,7 @@ export class MinecraftDownloader {
     targetVersionName: string,
     onProgress?: ProgressCallback
   ): Promise<FabricInstallResult> {
-    return this.fabricInstaller.installFabric(fabricVersion, targetVersionName, onProgress);
+    return this.fabricInstaller.installFabric(fabricVersion, targetVersionName, true, onProgress);
   }
 
   /**

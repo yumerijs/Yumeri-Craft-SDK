@@ -176,6 +176,18 @@ export interface VersionInfo {
    * 主类
    */
   mainClass: string;
+  
+  /**
+   * 启动参数 (新版本格式)
+   */
+  arguments?: {
+    jvm: (string | { rules: any[]; value: string | string[]; })[];
+    game: (string | { rules: any[]; value: string | string[]; })[];
+  };
+  /**
+   * 启动参数 (旧版本格式)
+   */
+  minecraftArguments?: string;
 }
 
 /**
@@ -254,6 +266,17 @@ export interface Library {
        * 操作系统架构
        */
       arch?: string;
+    };
+    /**
+     * 特性
+     */
+    features?: {
+      is_demo_user?: boolean;
+      has_custom_resolution?: boolean;
+      has_quick_plays_support?: boolean;
+      is_quick_play_singleplayer?: boolean;
+      is_quick_play_multiplayer?: boolean;
+      is_quick_play_realms?: boolean;
     };
   }[];
   
@@ -586,6 +609,31 @@ export interface LaunchArguments {
    * 最小内存（MB）
    */
   minMemory?: number;
+
+  /**
+   * 是否为演示用户
+   */
+  isDemoUser?: boolean;
+
+  /**
+   * 快速游戏路径
+   */
+  quickPlayPath?: string;
+
+  /**
+   * 快速游戏单人模式
+   */
+  quickPlaySingleplayer?: string;
+
+  /**
+   * 快速游戏多人模式
+   */
+  quickPlayMultiplayer?: string;
+
+  /**
+   * 快速游戏Realms
+   */
+  quickPlayRealms?: string;
   
   /**
    * 动态参数支持：允许任意字符串键值对
@@ -624,4 +672,72 @@ export interface LaunchResult {
   process?: any;
 }
 
+
+
+
+
+/**
+ * 启动选项
+ */
+export interface LaunchOptions {
+  /**
+   * 版本ID
+   */
+  version: string;
+  
+  /**
+   * 游戏目录
+   */
+  gameDirectory: string;
+  
+  /**
+   * Java可执行文件路径
+   */
+  javaPath: string;
+  
+  /**
+   * 访问令牌
+   */
+  accessToken: string;
+  
+  /**
+   * 用户UUID
+   */
+  uuid: string;
+  
+  /**
+   * 用户名
+   */
+  username: string;
+  
+  /**
+   * 窗口宽度
+   */
+  width: number;
+  
+  /**
+   * 窗口高度
+   */
+  height: number;
+  
+  /**
+   * JVM参数
+   */
+  vmOptions: string[];
+  
+  /**
+   * 游戏参数
+   */
+  gameOptions: string[];
+  
+  /**
+   * 最小内存
+   */
+  minMemory: number;
+  
+  /**
+   * 最大内存
+   */
+  maxMemory: number;
+}
 

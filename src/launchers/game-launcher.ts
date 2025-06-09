@@ -1,21 +1,25 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { spawn, ChildProcess } from 'child_process';
-import { LaunchArguments, LaunchResult, ProgressCallback } from '../types';
+import { LaunchArguments, LaunchResult, ProgressCallback, LaunchOptions, VersionInfo } from '../types';
+import os from 'os';
 
 interface LauncherConfigure {
   launcherVersion?: string;
   launcherName?: string;
 }
+
 /**
- * Minecraft游戏启动器（修复版）
+ * Minecraft游戏启动器
  */
 export class GameLauncher {
   private dataDir: string;
   private configure: LauncherConfigure = {};
+  
   /**
    * 构造函数
-   * @param dataDir 数据目录
+   * @param dataDir SDK数据目录，用于存放版本、库、资源等文件
+   * @param configure 启动器配置
    */
   constructor(dataDir: string = './minecraft-data', configure: LauncherConfigure = {}) {
     this.dataDir = dataDir;
@@ -23,44 +27,57 @@ export class GameLauncher {
   }
 
   /**
-   * 启动Minecraft游戏
-   * @param versionName 版本名称
-   * @param launchArgs 启动参数
-   * @param javaPath Java路径
+   * 生成Minecraft启动命令
+   * @param options 启动选项
    * @param onProgress 进度回调
-   * @param onLog 日志回调
-   * @returns 启动结果
+   * @returns 启动命令字符串
    */
-  public async launchGame(
-    versionName: string,
-    launchArgs: LaunchArguments,
-    javaPath: string = 'java',
-    onProgress?: ProgressCallback,
-    onLog?: (log: string) => void
-  ): Promise<LaunchResult> {
+  public async generateLaunchCommand(
+    options: LaunchOptions,
+    onProgress?: ProgressCallback
+  ): Promise<string> {
     try {
       if (onProgress) {
         onProgress(0, 100, 0);
       }
 
       // 读取版本JSON文件
-      const versionJsonPath = path.join(this.dataDir, 'versions', versionName, `${versionName}.json`);
+      const versionJsonPath = path.join(this.dataDir, 'versions', options.version, `${options.version}.json`);
       if (!await fs.pathExists(versionJsonPath)) {
         throw new Error(`版本JSON文件不存在: ${versionJsonPath}`);
       }
 
-      const versionJson = await fs.readJson(versionJsonPath);
+      const versionJson: VersionInfo = await fs.readJson(versionJsonPath);
 
       if (onProgress) {
         onProgress(10, 100, 10);
       }
 
       // 构建类路径
-      const classpath = await this.buildClasspath(versionJson, versionName);
+      const classpath = await this.buildClasspath(versionJson, options.version);
 
       if (onProgress) {
         onProgress(30, 100, 30);
       }
+
+      // 准备 LaunchArguments
+      const launchArgs: LaunchArguments = {
+        username: options.username,
+        accessToken: options.accessToken,
+        uuid: options.uuid,
+        gameDirectory: options.gameDirectory,
+        assetsDirectory: path.join(this.dataDir, 'assets'), // 资源目录通常在数据目录下的assets
+        assetIndex: versionJson.assetIndex.id,
+        versionName: options.version,
+        versionType: versionJson.type,
+        width: options.width,
+        height: options.height,
+        minMemory: options.minMemory,
+        maxMemory: options.maxMemory,
+        customJvmArgs: options.vmOptions,
+        customGameArgs: options.gameOptions,
+        // 更多参数可以根据需要从 options 映射过来
+      };
 
       // 构建JVM参数
       const jvmArgs = this.buildJvmArguments(versionJson, launchArgs, classpath);
@@ -87,10 +104,37 @@ export class GameLauncher {
         onProgress(90, 100, 90);
       }
 
+      const fullCommand = `${options.javaPath} ${args.join(' ')}`;
+
+      if (onProgress) {
+        onProgress(100, 100, 100);
+      }
+
+      return fullCommand;
+
+    } catch (error) {
+      throw new Error(`生成启动命令失败: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * 启动Minecraft游戏进程
+   * @param options 启动选项
+   * @param onLog 日志回调
+   * @returns 启动结果
+   */
+  public async launchGame(
+    options: LaunchOptions,
+    onLog?: (log: string) => void
+  ): Promise<LaunchResult> {
+    try {
+      const command = await this.generateLaunchCommand(options);
+      const args = command.split(' ').slice(1); // 移除java路径，只保留参数
+      const javaPath = command.split(' ')[0]; // 获取java路径
+
       // 启动游戏进程
       const gameProcess = spawn(javaPath, args, {
-        // cwd: launchArgs.gameDirectory,
-        cwd: process.cwd(), // 使用当前工作目录
+        cwd: options.gameDirectory || process.cwd(),
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
@@ -113,15 +157,11 @@ export class GameLauncher {
         });
       }
 
-      if (onProgress) {
-        onProgress(100, 100, 100);
-      }
-
       return {
         success: true,
         pid: gameProcess.pid,
         process: gameProcess,
-        command: `${javaPath} ${args.join(' ')}`
+        command: command
       };
 
     } catch (error) {
@@ -138,23 +178,19 @@ export class GameLauncher {
    * @param versionName 版本名称
    * @returns 类路径字符串
    */
-  private async buildClasspath(versionJson: any, versionName: string): Promise<string> {
+  private async buildClasspath(versionJson: VersionInfo, versionName: string): Promise<string> {
     const classpathEntries: string[] = [];
-
-    // 添加主JAR文件
-    const mainJarPath = path.join(this.dataDir, 'versions', versionName, `${versionName}.jar`);
-    classpathEntries.push(mainJarPath);
 
     // 添加库文件
     if (versionJson.libraries) {
       for (const library of versionJson.libraries) {
         // 检查规则
-        if (library.rules && !this.evaluateRules(library.rules)) {
+        if (library.rules && !this.evaluateRules(library.rules, {} as LaunchArguments)) { 
           continue;
         }
 
-        // 跳过原生库
-        if (library.name.includes('natives')) {
+        // 对于原生库，不添加到classpath
+        if (library.natives) {
           continue;
         }
 
@@ -167,39 +203,40 @@ export class GameLauncher {
       }
     }
 
+    // 添加主JAR文件（最后添加，按PCL2格式）
+    const mainJarPath = path.join(this.dataDir, 'versions', versionName, `${versionName}.jar`);
+    classpathEntries.push(mainJarPath);
+
     return classpathEntries.join(path.delimiter);
   }
 
   /**
-   * 构建JVM参数（修复重复-cp问题）
+   * 构建JVM参数
    * @param versionJson 版本JSON
    * @param launchArgs 启动参数
    * @param classpath 类路径
    * @returns JVM参数数组
    */
-  private buildJvmArguments(versionJson: any, launchArgs: LaunchArguments, classpath: string): string[] {
+  private buildJvmArguments(versionJson: VersionInfo, launchArgs: LaunchArguments, classpath: string): string[] {
     const jvmArgs: string[] = [];
 
-    // 添加内存参数
-    if (launchArgs.minMemory) {
-      jvmArgs.push(`-Xms${launchArgs.minMemory}m`);
-    }
-    if (launchArgs.maxMemory) {
-      jvmArgs.push(`-Xmx${launchArgs.maxMemory}m`);
+    // 添加自定义JVM参数（在最前面）
+    if (launchArgs.customJvmArgs) {
+      jvmArgs.push(...launchArgs.customJvmArgs);
     }
 
-    // 处理版本JSON中的JVM参数（跳过单独的-cp）
+    // 处理版本JSON中的JVM参数
     if (versionJson.arguments && versionJson.arguments.jvm) {
-      const processedArgs = this.processArgumentArray(versionJson.arguments.jvm, launchArgs, true);
+      const processedArgs = this.processArgumentArray(versionJson.arguments.jvm, launchArgs, true, classpath);
       jvmArgs.push(...processedArgs);
     }
 
-    // 添加类路径（确保只添加一次）
-    jvmArgs.push('-cp', classpath);
-
-    // 添加自定义JVM参数
-    if (launchArgs.customJvmArgs) {
-      jvmArgs.push(...launchArgs.customJvmArgs);
+    // 添加内存参数
+    if (launchArgs.minMemory) {
+      jvmArgs.push(`-Xmn${launchArgs.minMemory}m`);
+    }
+    if (launchArgs.maxMemory) {
+      jvmArgs.push(`-Xmx${launchArgs.maxMemory}m`);
     }
 
     return jvmArgs;
@@ -211,7 +248,7 @@ export class GameLauncher {
    * @param launchArgs 启动参数
    * @returns 游戏参数数组
    */
-  private buildGameArguments(versionJson: any, launchArgs: LaunchArguments): string[] {
+  private buildGameArguments(versionJson: VersionInfo, launchArgs: LaunchArguments): string[] {
     const gameArgs: string[] = [];
 
     // 处理新版本的arguments格式
@@ -235,37 +272,33 @@ export class GameLauncher {
   }
 
   /**
-   * 处理参数数组（修复版，正确处理rules和占位符）
+   * 处理参数数组（完全修复版，正确处理rules和占位符）
    * @param argumentArray 参数数组
    * @param launchArgs 启动参数
    * @param isJvmArgs 是否为JVM参数
+   * @param classpath 类路径 (仅对JVM参数有效)
    * @returns 处理后的参数数组
    */
-  private processArgumentArray(argumentArray: any[], launchArgs: LaunchArguments, isJvmArgs: boolean): string[] {
+  private processArgumentArray(argumentArray: any[], launchArgs: LaunchArguments, isJvmArgs: boolean, classpath?: string): string[] {
     const result: string[] = [];
 
     for (const arg of argumentArray) {
       if (typeof arg === 'string') {
         // 处理字符串参数
-        if (isJvmArgs && arg === '-cp') {
-          // 跳过JVM参数中单独的-cp，我们会在后面统一添加
-          continue;
-        }
-
-        const processedArg = this.replaceArguments(arg, launchArgs);
+        const processedArg = this.replaceArguments(arg, launchArgs, isJvmArgs ? classpath : undefined); // 传递 classpath
         if (processedArg !== null) {
           result.push(processedArg);
         }
       } else if (typeof arg === 'object' && arg.rules) {
         // 处理带rules的复杂参数
-        if (this.evaluateRules(arg.rules)) {
+        if (this.evaluateRules(arg.rules, launchArgs)) { // 传递 launchArgs 给 evaluateRules
           if (Array.isArray(arg.value)) {
-            // 处理数组值（如 ['--width', '${resolution_width}', '--height', '${resolution_height}']）
-            const processedValues = this.processComplexArgumentValue(arg.value, launchArgs);
+            // 处理数组值（如 ['--width', '${resolution_width}', '${resolution_height}']）
+            const processedValues = this.processComplexArgumentValue(arg.value, launchArgs, isJvmArgs ? classpath : undefined); // 传递 classpath
             result.push(...processedValues);
           } else if (typeof arg.value === 'string') {
             // 处理字符串值
-            const processedArg = this.replaceArguments(arg.value, launchArgs);
+            const processedArg = this.replaceArguments(arg.value, launchArgs, isJvmArgs ? classpath : undefined); // 传递 classpath
             if (processedArg !== null) {
               result.push(processedArg);
             }
@@ -281,9 +314,10 @@ export class GameLauncher {
    * 处理复杂参数值（数组形式）
    * @param valueArray 参数值数组
    * @param launchArgs 启动参数
+   * @param classpath 类路径 (仅对JVM参数有效)
    * @returns 处理后的参数数组
    */
-  private processComplexArgumentValue(valueArray: any[], launchArgs: LaunchArguments): string[] {
+  private processComplexArgumentValue(valueArray: any[], launchArgs: LaunchArguments, classpath?: string): string[] {
     const result: string[] = [];
     let i = 0;
 
@@ -296,7 +330,7 @@ export class GameLauncher {
           const next = valueArray[i + 1];
           if (typeof next === 'string' && next.includes('${')) {
             // 下一个是占位符，尝试替换
-            const processedNext = this.replaceArguments(next, launchArgs);
+            const processedNext = this.replaceArguments(next, launchArgs, classpath); // 传递 classpath
             if (processedNext !== null) {
               // 替换成功，添加参数名和值
               result.push(current, processedNext);
@@ -310,7 +344,7 @@ export class GameLauncher {
           }
         } else {
           // 不是参数名，直接处理
-          const processedArg = this.replaceArguments(current, launchArgs);
+          const processedArg = this.replaceArguments(current, launchArgs, classpath); // 传递 classpath
           if (processedArg !== null) {
             result.push(processedArg);
           }
@@ -326,49 +360,41 @@ export class GameLauncher {
   }
 
   /**
-   * 替换参数中的占位符（动态匹配，不预定义）
+   * 替换参数中的占位符（动态匹配，完全按PCL2标准）
    * @param arg 原始参数
    * @param launchArgs 启动参数
+   * @param classpath 类路径 (仅对classpath占位符有效)
    * @returns 替换后的参数，如果无法替换则返回null
    */
-  private replaceArguments(arg: string, launchArgs: LaunchArguments): string | null {
+  private replaceArguments(arg: string, launchArgs: LaunchArguments, classpath?: string): string | null {
     let result = arg;
     let hasUnresolvedPlaceholder = false;
 
     // 查找所有占位符 ${xxx}
-    const placeholderRegex = /\$\{([^}]+)\}/g;
-    let match: any[];
+    const placeholderRegex = /\$\{(.+?)\}/g; 
+    let match;
 
     while ((match = placeholderRegex.exec(arg)) !== null) {
-      const fullPlaceholder = match[0]; // ${xxx}
-      const placeholderKey = match[1];  // xxx
+      const fullPlaceholder = match[0]; 
+      const placeholderKey = match[1];  
 
-      // 动态从launchArgs中查找对应的属性值
       let replacementValue: string | undefined;
 
       // 特殊处理一些固定的系统占位符
       if (placeholderKey === 'natives_directory') {
-        // replacementValue = launchArgs.natives_directory as string;
-        replacementValue = launchArgs.natives_directory as string || path.join(launchArgs.gameDirectory || this.dataDir, 'versions', launchArgs.versionName, `${launchArgs.versionName}-natives`);
+        replacementValue = path.join(this.dataDir, 'versions', launchArgs.versionName || 'unknown', `${launchArgs.versionName || 'unknown'}-natives`);
       } else if (placeholderKey === 'launcher_name') {
         replacementValue = this.configure.launcherName || 'minecraft-launcher-sdk';
       } else if (placeholderKey === 'launcher_version') {
         replacementValue = this.configure.launcherVersion || '1.0.0';
       } else if (placeholderKey === 'classpath') {
-        // classpath在JVM参数中单独处理，这里跳过
-        return null;
-      } else if (placeholderKey === 'assets_root') {
-        replacementValue = path.join(launchArgs.assetsDirectory || this.dataDir, 'assets');
-      } else if (placeholderKey === 'game_directory') {
-        replacementValue = launchArgs.gameDirectory || this.dataDir;
+        replacementValue = classpath; 
       } else {
-        // 动态查找launchArgs中的属性
-        // 支持多种命名格式的映射
         const propertyMappings: Record<string, keyof LaunchArguments> = {
           'auth_player_name': 'username',
           'version_name': 'versionName',
-          // 'game_directory': 'gameDirectory',
-          // 'assets_root': 'assetsDirectory',
+          'game_directory': 'gameDirectory',
+          'assets_root': 'assetsDirectory',
           'assets_index_name': 'assetIndex',
           'auth_uuid': 'uuid',
           'auth_access_token': 'accessToken',
@@ -381,17 +407,14 @@ export class GameLauncher {
           'quickPlayPath': 'quickPlayPath',
           'quickPlaySingleplayer': 'quickPlaySingleplayer',
           'quickPlayMultiplayer': 'quickPlayMultiplayer',
-          'quickPlayRealms': 'quickPlayRealms',
-          'natives_directory': 'nativesdirectory'
+          'quickPlayRealms': 'quickPlayRealms'
         };
 
-        // 首先尝试直接匹配
         const directKey = placeholderKey as keyof LaunchArguments;
         if (directKey in launchArgs) {
           const value = launchArgs[directKey];
           replacementValue = value?.toString();
         }
-        // 然后尝试映射匹配
         else if (placeholderKey in propertyMappings) {
           const mappedKey = propertyMappings[placeholderKey];
           const value = launchArgs[mappedKey];
@@ -399,17 +422,13 @@ export class GameLauncher {
         }
       }
 
-      // 检查是否找到了有效的替换值
       if (replacementValue !== undefined && replacementValue !== '') {
-        // 有值，进行替换
         result = result.replace(new RegExp(fullPlaceholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacementValue);
       } else {
-        // 没有值，标记为无法解析
         hasUnresolvedPlaceholder = true;
       }
     }
 
-    // 如果有无法解析的占位符，返回null（表示删除这个参数）
     if (hasUnresolvedPlaceholder) {
       return null;
     }
@@ -418,11 +437,12 @@ export class GameLauncher {
   }
 
   /**
-   * 评估规则（支持features）
+   * 评估规则（支持features和OS）
    * @param rules 规则数组
+   * @param launchArgs 启动参数 (用于评估features)
    * @returns 是否满足规则
    */
-  private evaluateRules(rules: any[]): boolean {
+  private evaluateRules(rules: any[], launchArgs: LaunchArguments): boolean {
     let allowed = false;
 
     for (const rule of rules) {
@@ -435,7 +455,7 @@ export class GameLauncher {
         }
 
         // 检查features规则
-        if (rule.features && !this.matchesFeatures(rule.features)) {
+        if (rule.features && !this.matchesFeatures(rule.features, launchArgs)) { 
           matches = false;
         }
 
@@ -451,7 +471,7 @@ export class GameLauncher {
         }
 
         // 检查features规则
-        if (rule.features && !this.matchesFeatures(rule.features)) {
+        if (rule.features && !this.matchesFeatures(rule.features, launchArgs)) { 
           matches = false;
         }
 
@@ -470,16 +490,33 @@ export class GameLauncher {
    * @returns 是否匹配
    */
   private matchesOs(osRule: any): boolean {
-    const platform = process.platform;
+    const platform = os.platform(); 
+    const arch = os.arch(); 
 
     if (osRule.name) {
       switch (osRule.name) {
         case 'windows':
-          return platform === 'win32';
+          if (platform !== 'win32') return false;
+          break;
         case 'osx':
-          return platform === 'darwin';
+          if (platform !== 'darwin') return false;
+          break;
         case 'linux':
-          return platform === 'linux';
+          if (platform !== 'linux') return false;
+          break;
+        default:
+          return false;
+      }
+    }
+
+    if (osRule.arch) {
+      switch (osRule.arch) {
+        case 'x86':
+          if (arch !== 'ia32') return false;
+          break;
+        case 'x64':
+          if (arch !== 'x64') return false;
+          break;
         default:
           return false;
       }
@@ -491,20 +528,49 @@ export class GameLauncher {
   /**
    * 检查features是否匹配
    * @param featuresRule features规则
+   * @param launchArgs 启动参数
    * @returns 是否匹配
    */
-  private matchesFeatures(featuresRule: any): boolean {
-    // 这里可以根据实际需求实现features检查
-    // 目前简单返回false，表示不启用这些特殊功能
-    // 如果需要启用某些功能，可以在这里添加逻辑
+  private matchesFeatures(featuresRule: any, launchArgs: LaunchArguments): boolean {
+    let allFeaturesMatch = true;
 
-    // 例如：如果有分辨率参数，启用自定义分辨率功能
-    if (featuresRule.has_custom_resolution) {
-      return false; // 暂时禁用，避免空参数
+    if (featuresRule.has_custom_resolution !== undefined) {
+      if (featuresRule.has_custom_resolution && (!launchArgs.width || !launchArgs.height)) {
+        allFeaturesMatch = false;
+      }
     }
 
-    // 其他features默认不启用
-    return false;
+    if (featuresRule.is_demo_user !== undefined) {
+      if (featuresRule.is_demo_user && !launchArgs.isDemoUser) {
+        allFeaturesMatch = false;
+      }
+    }
+
+    if (featuresRule.has_quick_plays_support !== undefined) {
+      if (featuresRule.has_quick_plays_support && !launchArgs.quickPlayPath) {
+        allFeaturesMatch = false;
+      }
+    }
+
+    if (featuresRule.is_quick_play_singleplayer !== undefined) {
+      if (featuresRule.is_quick_play_singleplayer && !launchArgs.quickPlaySingleplayer) {
+        allFeaturesMatch = false;
+      }
+    }
+
+    if (featuresRule.is_quick_play_multiplayer !== undefined) {
+      if (featuresRule.is_quick_play_multiplayer && !launchArgs.quickPlayMultiplayer) {
+        allFeaturesMatch = false;
+      }
+    }
+
+    if (featuresRule.is_quick_play_realms !== undefined) {
+      if (featuresRule.is_quick_play_realms && !launchArgs.quickPlayRealms) {
+        allFeaturesMatch = false;
+      }
+    }
+
+    return allFeaturesMatch;
   }
 
   /**
@@ -522,5 +588,14 @@ export class GameLauncher {
   public getDataDir(): string {
     return this.dataDir;
   }
+
+  /**
+   * 设置启动器配置
+   * @param configure 启动器配置
+   */
+  public setConfigure(configure: LauncherConfigure): void {
+    this.configure = configure;
+  }
 }
+
 

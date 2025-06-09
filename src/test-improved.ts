@@ -1,189 +1,147 @@
-import { MinecraftDownloader, DownloadSource, GameLauncher, LaunchArguments } from './index';
-import * as fs from 'fs-extra';
-import path from 'path';
+import { MinecraftDownloader, GameLauncher } from "./index";
+import { LaunchOptions } from "./types";
+import path from "path";
+import fs from "fs-extra";
 
-/**
- * 测试改进后的SDK功能
- */
-async function testImprovedSDK() {
-  console.log('开始测试改进后的Minecraft启动器SDK...\n');
+const dataPath = "test-minecraft-data";
 
-  // 创建下载器实例
-  const downloader = new MinecraftDownloader({
-    source: DownloadSource.BMCLAPI, // 使用BMCLAPI源（国内加速）
-    dataDir: './test-minecraft-data',
-    maxConcurrentDownloads: 3,
-    validateIntegrity: true
-  });
+async function runTests() {
+    console.log("开始测试改进后的Minecraft启动器SDK...");
 
-  // 创建启动器实例
-  const launcher = new GameLauncher('./test-minecraft-data');
-
-  try {
-    // 测试1：下载Minecraft版本
-    console.log('=== 测试1：下载Minecraft客户端 ===');
-    const versionId = '1.20.1';
-    const versionName = 'minecraft-1.20.1';
-    
-    // console.log(`正在下载Minecraft ${versionId}...`);
-    // const downloadResult = await downloader.downloadClient(versionId, versionName, (progress, total, percentage) => {
-    //   console.log(`下载进度: ${Math.round(percentage)}% (${progress}/${total})`);
-    // });
-
-    // if (downloadResult.success) {
-    //   console.log(`✓ Minecraft ${versionId} 下载成功`);
-    //   console.log(`客户端JAR路径: ${downloadResult.filePath}`);
-    // } else {
-    //   console.error(`✗ Minecraft ${versionId} 下载失败: ${downloadResult.error}`);
-    //   return;
-    // }
-
-    // // 测试2：获取并安装Forge
-    // console.log('\n=== 测试2：安装Forge模组加载器 ===');
-    // try {
-    //   console.log(`正在获取Minecraft ${versionId}的Forge版本列表...`);
-    //   const forgeVersions = await downloader.getForgeVersions(versionId);
-      
-    //   if (forgeVersions.length > 0) {
-    //     // 选择推荐版本或最新版本
-    //     const recommendedForge = forgeVersions.find(v => v.recommended) || forgeVersions[0];
-    //     console.log(`选择Forge版本: ${recommendedForge.version} (构建号: ${recommendedForge.build})`);
-        
-    //     console.log(`正在安装Forge到版本 ${versionName}...`);
-    //     const forgeResult = await downloader.installForge(recommendedForge, versionName, 'java', (progress, total, percentage) => {
-    //       console.log(`Forge安装进度: ${Math.round(percentage)}% (${progress}/${total})`);
-    //     });
-        
-    //     if (forgeResult.success) {
-    //       console.log(`✓ Forge安装成功!`);
-    //       console.log(`版本ID: ${forgeResult.versionId}`);
-    //       console.log(`版本JSON路径: ${forgeResult.versionJsonPath}`);
-    //     } else {
-    //       console.log(`✗ Forge安装失败: ${forgeResult.error}`);
-    //     }
-    //   } else {
-    //     console.log(`未找到Minecraft ${versionId}的Forge版本`);
-    //   }
-    // } catch (error) {
-    //   console.log(`Forge测试跳过: ${error}`);
-    // }
-
-    // // 测试3：获取并安装Fabric
-    // console.log('\n=== 测试3：安装Fabric模组加载器 ===');
-    // try {
-    //   console.log(`正在获取Minecraft ${versionId}的Fabric版本列表...`);
-    //   const fabricVersions = await downloader.getFabricVersions(versionId);
-      
-    //   if (fabricVersions.length > 0) {
-    //     // 选择稳定版本或第一个版本
-    //     const stableFabric = fabricVersions.find(v => v.stable) || fabricVersions[0];
-    //     console.log(`选择Fabric版本: ${stableFabric.loaderVersion}`);
-        
-    //     // 为Fabric创建一个新的版本名称
-    //     const fabricVersionName = `${versionName}-fabric`;
-        
-    //     // 先复制原版本文件夹
-        
-    //     const path = require('path');
-    //     const originalDir = path.join('./test-minecraft-data/versions', versionName);
-    //     const fabricDir = path.join('./test-minecraft-data/versions', fabricVersionName);
-        
-    //     if (await fs.pathExists(originalDir)) {
-    //       await fs.copy(originalDir, fabricDir);
-    //       console.log(`已复制版本文件夹到: ${fabricVersionName}`);
-    //     }
-    //     await fs.copy(path.join(originalDir, `${versionName}.json`), path.join(fabricDir, `${fabricVersionName}.json`));
-        
-    //     console.log(`正在安装Fabric到版本 ${fabricVersionName}...`);
-    //     const fabricResult = await downloader.installFabric(stableFabric, fabricVersionName, (progress, total, percentage) => {
-    //       console.log(`Fabric安装进度: ${Math.round(percentage)}% (${progress}/${total})`);
-    //     });
-        
-    //     if (fabricResult.success) {
-    //       console.log(`✓ Fabric安装成功!`);
-    //       console.log(`版本ID: ${fabricResult.versionId}`);
-    //       console.log(`版本JSON路径: ${fabricResult.versionJsonPath}`);
-    //     } else {
-    //       console.log(`✗ Fabric安装失败: ${fabricResult.error}`);
-    //     }
-    //   } else {
-    //     console.log(`未找到Minecraft ${versionId}的Fabric版本`);
-    //   }
-    // } catch (error) {
-    //   console.log(`Fabric测试跳过: ${error}`);
-    // }
-
-    // 测试4：测试启动逻辑（不实际启动游戏）
-    console.log('\n=== 测试2：测试修复后的启动器（完整参数） ===');
+    // === 测试1：下载Minecraft客户端 (原版) ===
+    console.log("\n=== 测试1：下载Minecraft客户端 (原版) ===");
     try {
-      const fullArgs: LaunchArguments = {
-        username: 'TestPlayer',
-        accessToken: '0',
-        uuid: 'test-uuid-1234-5678-9012-345678901234',
-        userType: 'Legacy',
-        assetIndex: '5',
-        versionName: versionName,
-        versionType: 'release',
-        width: 1920,
-        height: 1080,
-        maxMemory: 4096,
-        minMemory: 1024
-      };
+        const downloader = new MinecraftDownloader({ dataDir: dataPath });
+        console.log("正在下载Minecraft 1.21.5...");
+        const downloadResult = await downloader.downloadClient("1.21.5", "1.21.5", (progress, total, percentage) => {
+            console.log(`下载进度: ${percentage}% (${progress}/${total})`);
+        });
 
-      console.log(`正在测试完整参数启动...`);
-      const fullResult = await launcher.launchGame(
-        versionName, 
-        fullArgs, 
-        'java',
-        (progress, total, percentage) => {
-          console.log(`启动准备进度: ${Math.round(percentage)}%`);
-        },
-        (log) => {
-          console.log(`[MC日志] ${log.trim()}`);
+        if (downloadResult.success) {
+            console.log("✓ Minecraft 1.21.5 下载成功");
+            console.log("客户端JAR路径:", downloadResult.filePath);
+        } else {
+            console.error("✗ Minecraft 1.21.5 下载失败:", downloadResult.error);
         }
-      );
-
-      if (fullResult.success) {
-        console.log(`✓ 完整参数启动命令构建成功!`);
-        const command = fullResult.command || '';
-        
-        // 检查修复效果
-        console.log(`\n启动命令分析:`);
-        console.log(`- 命令长度: ${command.length} 字符`);
-        console.log(`- 包含用户名: ${command.includes('TestPlayer')}`);
-        console.log(`- 包含分辨率: ${command.includes('1920') && command.includes('1080')}`);
-        console.log(`- 包含版本名: ${command.includes(versionName)}`);
-        console.log(`- 没有重复的-cp: ${!command.includes('-cp -cp')}`);
-        console.log(`- 没有未解析占位符: ${!command.includes('${')}`);
-        console.log(`- 没有空参数: ${!command.includes('--clientId --') && !command.includes('--xuid --')}`);
-        console.log(`启动命令: ${command}`);
-        
-        // 显示启动命令的关键部分
-        const args = command.split(' ');
-        const cpIndex = args.indexOf('-cp');
-        if (cpIndex !== -1 && cpIndex + 1 < args.length) {
-          console.log(`- 类路径参数正确: ${args[cpIndex + 1].length > 0}`);
-        }
-        
-        // 终止测试进程
-        if (fullResult.pid) {
-          try { process.kill(fullResult.pid); } catch {}
-        }
-      } else {
-        console.error(`✗ 完整参数启动失败: ${fullResult.error}`);
-      }
     } catch (error) {
-      console.error('完整参数测试失败:', error);
+        console.error("✗ Minecraft 1.21.5 下载过程中发生错误:", error);
     }
 
-    console.log('\n=== 测试完成 ===');
-    console.log('所有主要功能已测试完成！');
+    // === 测试2：测试原版启动命令生成 ===
+    console.log("\n=== 测试2：测试原版启动命令生成 ===");
+    try {
+        const vanillaVersion = "1.21.5";
+        const vanillaVersionJsonPath = path.join(dataPath, "versions", vanillaVersion, `${vanillaVersion}.json`);
+        const vanillaClientJarPath = path.join(dataPath, "versions", vanillaVersion, `${vanillaVersion}.jar`);
 
-  } catch (error) {
-    console.error('测试过程中发生错误:', error);
-  }
+        if (!fs.existsSync(vanillaVersionJsonPath) || !fs.existsSync(vanillaClientJarPath)) {
+            console.log(`原版版本文件或客户端JAR不存在，请先下载: ${vanillaVersionJsonPath}, ${vanillaClientJarPath}`);
+            return;
+        }
+
+        const vanillaLaunchOptions: LaunchOptions = {
+            version: vanillaVersion,
+            gameDirectory: dataPath,
+            javaPath: "java",
+            accessToken: "test_token",
+            uuid: "test_uuid",
+            username: "test_player",
+            width: 854,
+            height: 480,
+            vmOptions: [],
+            gameOptions: [],
+            minMemory: 1024,
+            maxMemory: 2048,
+        };
+
+        const vanillaLauncher = new GameLauncher(dataPath);
+        console.log("原版启动准备进度: 0%");
+        const vanillaCommand = await vanillaLauncher.generateLaunchCommand(vanillaLaunchOptions, (progress, total, percentage) => {
+            console.log(`原版启动准备进度: ${Math.round(percentage)}%`);
+        });
+        console.log("✓ 原版启动命令构建成功!");
+        console.log("原版启动命令:", vanillaCommand);
+    } catch (error) {
+        console.error("✗ 原版启动命令构建失败:", error);
+    }
+
+    // === 测试3：测试Fabric启动命令生成 ===
+    console.log("\n=== 测试3：测试Fabric启动命令生成 ===");
+    try {
+        const fabricVersion = "1.21.5-Fabric0.16.14";
+        const fabricVersionJsonPath = path.join(dataPath, "versions", fabricVersion, `${fabricVersion}.json`);
+        const fabricClientJarPath = path.join(dataPath, "versions", fabricVersion, `${fabricVersion}.jar`);
+
+        if (!fs.existsSync(fabricVersionJsonPath) || !fs.existsSync(fabricClientJarPath)) {
+            console.log(`Fabric 版本文件或客户端JAR不存在，请先下载: ${fabricVersionJsonPath}, ${fabricClientJarPath}`);
+            return;
+        }
+
+        const fabricLaunchOptions: LaunchOptions = {
+            version: fabricVersion,
+            gameDirectory: dataPath,
+            javaPath: "java",
+            accessToken: "test_token",
+            uuid: "test_uuid",
+            username: "test_player",
+            width: 854,
+            height: 480,
+            vmOptions: [],
+            gameOptions: [],
+            minMemory: 1024,
+            maxMemory: 2048,
+        };
+
+        const fabricLauncher = new GameLauncher(dataPath);
+        console.log("Fabric 启动准备进度: 0%");
+        const fabricCommand = await fabricLauncher.generateLaunchCommand(fabricLaunchOptions, (progress, total, percentage) => {
+            console.log(`Fabric 启动准备进度: ${Math.round(percentage)}%`);
+        });
+        console.log("✓ Fabric 启动命令构建成功!");
+        console.log("Fabric 启动命令:", fabricCommand);
+    } catch (error) {
+        console.error("✗ Fabric 启动命令构建失败:", error);
+    }
+
+    // === 测试4：测试Forge启动命令生成 ===
+    console.log("\n=== 测试4：测试Forge启动命令生成 ===");
+    try {
+        const forgeVersion = "1.21.5-Forge_55.0.22";
+        const forgeVersionJsonPath = path.join(dataPath, "versions", forgeVersion, `${forgeVersion}.json`);
+        const forgeClientJarPath = path.join(dataPath, "versions", forgeVersion, `${forgeVersion}.jar`);
+
+        if (!fs.existsSync(forgeVersionJsonPath) || !fs.existsSync(forgeClientJarPath)) {
+            console.log(`Forge 版本文件或客户端JAR不存在，请先下载: ${forgeVersionJsonPath}, ${forgeClientJarPath}`);
+            return;
+        }
+
+        const forgeLaunchOptions: LaunchOptions = {
+            version: forgeVersion,
+            gameDirectory: dataPath,
+            javaPath: "java",
+            accessToken: "0",
+            uuid: "test_uuid",
+            username: "test_player",
+            width: 854,
+            height: 480,
+            vmOptions: [],
+            gameOptions: [],
+            minMemory: 1024,
+            maxMemory: 2048,
+        };
+
+        const forgeLauncher = new GameLauncher(dataPath);
+        console.log("Forge 启动准备进度: 0%");
+        const forgeCommand = await forgeLauncher.generateLaunchCommand(forgeLaunchOptions, (progress, total, percentage) => {
+            console.log(`Forge 启动准备进度: ${Math.round(percentage)}%`);
+        });
+        console.log("✓ Forge 启动命令构建成功!");
+        console.log("Forge 启动命令:", forgeCommand);
+    } catch (error) {
+        console.error("✗ Forge 启动命令构建失败:", error);
+    }
 }
 
-// 运行测试
-testImprovedSDK().catch(console.error);
+runTests();
+
 
